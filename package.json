@@ -1,0 +1,23 @@
+{
+  "name": "perigonforge",
+  "version": "0.0.1",
+  "description": "",
+  "homepage": "https://github.com/alexander-perigon/PerigonForge#readme",
+  "bugs": {
+    "url": "https://github.com/alexander-perigon/PerigonForge/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexander-perigon/PerigonForge.git"
+  },
+  "license": "MIT",
+  "author": "alexander-perigon",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "vite"
+  },
+  "dependencies": {
+    "vite": "^7.3.1"
+  }
+}

@@ -1,6 +1,6 @@
 # PerigonForge
 a open-source voxel engine made in c# and opengl. (uses opentk wrapper)
-![](![alt text](https://raw.githubusercontent.com/alexander-perigon/PerigonForge/refs/heads/main/images/Screenshot%202026-03-05%20164315.png))
+![alt text](https://raw.githubusercontent.com/alexander-perigon/PerigonForge/refs/heads/main/images/Screenshot%202026-03-05%20164315.png)
 A high-performance voxel engine written in C# using OpenTK for 3D graphics rendering. Features procedural terrain generation, octree-based chunk management, and multi-threaded world processing.
 
 ## Features

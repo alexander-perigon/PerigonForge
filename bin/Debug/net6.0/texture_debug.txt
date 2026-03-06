@@ -1,0 +1,4 @@
+BaseDir: C:\Users\alexa\Downloads\PerigonForge\bin\Debug\net6.0\
+CurrentDir: C:\Users\alexa\Downloads\PerigonForge
+TexturePath: C:\Users\alexa\Downloads\PerigonForge\Resources\Blocks\Atlas.png
+Exists: True

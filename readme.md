@@ -1,128 +1,54 @@
 # PerigonForge
-a open-source voxel engine made in c# and opengl. (uses opentk wrapper)
-![alt text](https://raw.githubusercontent.com/alexander-perigon/PerigonForge/refs/heads/main/images/Screenshot%202026-03-05%20164315.png)
-A high-performance voxel engine written in C# using OpenTK for 3D graphics rendering. Features procedural terrain generation, octree-based chunk management, and multi-threaded world processing.
+
+A high-performance voxel engine built in C# using the OpenTK wrapper for OpenGL. Engineered for efficiency, PerigonForge utilizes advanced data structures and multi-threaded processing to handle large-scale procedural environments.
+
+![PerigonForge Screenshot](https://raw.githubusercontent.com/alexander-perigon/PerigonForge/refs/heads/main/images/Screenshot%202026-03-05%20164315.png)
+
+## License and Terms of Use
+
+**Proprietary Software - All Rights Reserved**
+
+This software and its source code are the exclusive property of alexander-perigon. 
+
+* **Authorized Attribution:** Modification, reproduction, or distribution of these files is strictly prohibited unless performed by the authorized Attributor (alexander-perigon). 
+* **Integrity and Safety:** This engine is provided in compiled Object Code form to ensure stability. Unauthorized tampering with the binary or internal file structure is a direct violation of the licensing terms.
+* **User Responsibility:** Any attempt to modify, move, or alter files within the directory is done at the user's own risk. The developer assumes no responsibility for software failure, data corruption, or system instability resulting from unauthorized edits. If the file structure is altered by anyone other than the authorized Attributor, the software is considered unsupported.
+
+---
 
 ## Features
 
 ### Core Engine
-- **Chunk-Based World**: 32x32x32 voxel chunks with sparse octree storage for efficient memory usage
-- **Procedural Terrain**: Multi-octave simplex noise for realistic terrain generation with biomes (beach, plains, hills, mountains)
-- **Multi-threaded Processing**: Parallel chunk generation and mesh building using Task.Run
+* **Octree-Based World:** 32x32x32 voxel chunks utilizing sparse octrees for optimized memory management.
+* **Procedural Generation:** Multi-octave simplex noise implementation for realistic terrain with distinct biomes including beaches, plains, hills, and mountains.
+* **Multi-threaded Pipeline:** Parallelized chunk generation and mesh building using asynchronous tasks to ensure a consistent frame rate.
 
 ### Rendering
-- **Sky System**: Dynamic sky rendering with atmospheric scattering
-- **Cloud Renderer**: Volumetric cloud layer
-- **Frustum Culling**: Efficient view frustum culling to reduce draw calls
-- **Texture Atlas**: Block texture atlas with per-face texture mapping
+* **Atmospheric Sky:** Dynamic sky rendering featuring atmospheric scattering and a volumetric cloud layer.
+* **Optimization:** Hardware-accelerated view frustum culling and greedy meshing to maximize performance.
+* **Texture Mapping:** Integrated block texture atlas with per-face mapping support.
 
-### Gameplay
-- **First-Person Camera**: WASD movement with mouse look
-- **Block Selection**: Raycast-based block highlighting with outline
-- **Block Placement/Destruction**: Left-click to break, right-click to place blocks
-- **Hotbar System**: 9-slot hotbar with number keys for selection
+### Interaction and UI
+* **Precision Raycasting:** Real-time block highlighting and selection for construction and destruction.
+* **Hotbar Utility:** 9-slot inventory system with instant numerical key selection.
+* **Engine Monitoring:** Real-time FPS counter, draw call tracking, and atmospheric controls for fog and render distance.
 
-### UI
-- **Crosshair**: Center screen targeting reticle
-- **FPS Counter**: Real-time frame rate and draw call display
-- **Render Distance Slider**: Adjustable view distance in real-time
-- **Fog Density Control**: Atmospheric fog adjustment
+---
 
-## Building
+## Environment and Building
 
 ### Prerequisites
-- .NET 8.0 SDK or later
-- OpenGL 4.3 compatible graphics card
+* .NET 8.0 SDK or later
+* OpenGL 4.3 or higher compatible graphics card
 
 ### Build Commands
+*Note: Build access is restricted to the authorized Attributor and verified contributors.*
 ```bash
-# Restore dependencies
+# Restore project dependencies
 dotnet restore
 
-# Build the project
+# Execute build process
 dotnet build
 
-# Run the engine
+# Launch the engine
 dotnet run
-```
-
-## Controls
-
-| Key | Action |
-|-----|--------|
-| W/A/S/D | Move forward/left/back/right |
-| Mouse | Look around |
-| Left Click | Break block |
-| Right Click | Place block |
-| 1-9 | Select hotbar slot |
-| Space | Jump |
-| Shift | Descend |
-| F11 | Toggle fullscreen |
-| Escape | Release mouse cursor |
-
-## Project Structure
-
-```
-PerigonForge/
-├── Program.cs              # Entry point
-├── VoxelEngine.csproj      # Project file
-├── blockregister/         # Block type definitions and textures
-│   └── BlockRegistry.cs
-├── player/
-│   └── Camera.cs           # First-person camera
-├── resources/
-│   ├── audio/              # Background music
-│   └── blocks/             # Block textures
-├── shaders/                # GLSL shaders
-│   └── Shader.cs
-├── sky/
-│   └── SkyRenderer.cs      # Sky dome rendering
-├── src/
-│   ├── Chunk.cs            # Chunk data structure
-│   ├── ChunkRenderer.cs   # Chunk mesh generation
-│   ├── CloudRenderer.cs   # Cloud rendering
-│   ├── Game.cs            # Main game loop
-│   ├── HotbarSystem.cs    # Player inventory
-│   ├── MeshBuilder.cs     # Geometry builders
-│   ├── SelectionRenderer.cs # Block selection outline
-│   ├── Settings.cs        # Engine settings
-│   └── ...
-├── systems/
-│   ├── RaycastSystem.cs   # Block raycasting
-│   └── SkySystem.cs       # Sky calculations
-├── ui/
-│   ├── CrosshairRenderer.cs
-│   ├── FontRenderer.cs
-│   ├── TextRenderer.cs
-│   └── UIRenderer.cs
-└── worldgen/
-    ├── TerrainGenerator.cs # Procedural terrain
-    └── World.cs           # World management
-```
-
-## Technical Details
-
-### Chunk Storage
-- Uses sparse octree for efficient voxel storage
-- Supports empty chunk detection to skip rendering
-- Memory pooling with ArrayPool for mesh data
-
-### Terrain Generation
-- Simplex noise with configurable octaves
-- Continental, terrain, and detail layers
-- Biome-based block distribution (grass, dirt, stone)
-
-### Rendering Pipeline
-1. Frustum culling per chunk
-3. Greedy mesh generation
-4. Texture atlas UV mapping
-5. OpenGL VAO/VBO rendering
-
-## Configuration
-
-Edit [`src/Settings.cs`](src/Settings.cs) to modify default settings:
-- Render distance
-- Fog density
-- Camera movement speed
-- Mouse sensitivity
-- Some things may be changed in the feature and thing may not work all correctly right now.

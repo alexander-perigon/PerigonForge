@@ -51,6 +51,7 @@ dotnet restore
 dotnet build
 
 # Launch the engine
-dotnet run
-# Environment
+dotnet run```
+## Environment
 Only known to support windows for now.
+

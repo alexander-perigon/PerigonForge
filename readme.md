@@ -40,6 +40,7 @@ This software and its source code are the exclusive property of alexander-perigo
 ### Prerequisites
 * .NET 8.0 SDK or later
 * OpenGL 4.3 or higher compatible graphics card
+* Only supports windows right now
 
 ### Build Commands
 *Note: Build access is restricted to the authorized Attributor and verified contributors.*
@@ -51,7 +52,6 @@ dotnet restore
 dotnet build
 
 # Launch the engine
-dotnet run```
-## Environment
-Only known to support windows for now.
+dotnet run
+
 

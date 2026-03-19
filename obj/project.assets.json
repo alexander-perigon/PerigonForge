@@ -1,7 +1,7 @@
 {
   "version": 3,
   "targets": {
-    "net8.0": {
+    "net8.0-windows7.0": {
       "Microsoft.Win32.SystemEvents/8.0.0": {
         "type": "package",
         "compile": {
@@ -525,7 +525,7 @@
     }
   },
   "projectFileDependencyGroups": {
-    "net8.0": [
+    "net8.0-windows7.0": [
       "OpenTK >= 4.8.0",
       "System.Drawing.Common >= 8.0.0"
     ]
@@ -536,9 +536,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\alexa\\Downloads\\PerigonForge\\VoxelEngine.csproj",
-      "projectName": "VoxelEngine",
-      "projectPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\VoxelEngine.csproj",
+      "projectUniqueName": "C:\\Users\\alexa\\Downloads\\PerigonForge\\perigonforge.csproj",
+      "projectName": "PerigonForge",
+      "projectPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\perigonforge.csproj",
       "packagesPath": "C:\\Users\\alexa\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\obj\\",
       "projectStyle": "PackageReference",
@@ -546,14 +546,14 @@
         "C:\\Users\\alexa\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
-        "net8.0"
+        "net8.0-windows"
       ],
       "sources": {
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
-        "net8.0": {
-          "targetAlias": "net8.0",
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
           "projectReferences": {}
         }
       },
@@ -570,8 +570,8 @@
       "SdkAnalysisLevel": "10.0.100"
     },
     "frameworks": {
-      "net8.0": {
-        "targetAlias": "net8.0",
+      "net8.0-windows7.0": {
+        "targetAlias": "net8.0-windows",
         "dependencies": {
           "OpenTK": {
             "target": "Package",

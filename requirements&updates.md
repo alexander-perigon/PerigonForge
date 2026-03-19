@@ -29,8 +29,6 @@
 - GLSL 4.30 compatible shaders
 - Multi-threaded processor (minimum 2 cores)
 
-## upcoming soon updates
-
 ### World Generation
 - [x] Procedural terrain
 - [x] Multi-layer noise 
@@ -46,11 +44,12 @@
 
 ### Rendering
 - [x] Block rendering with texture atlas
-- [x] Per-face texturing
+- [x] Tiling Texture on a face
 - [x] Sky dome rendering
 - [x] Cloud layer
 - [x] Fog/atmosphere
 - [x] Block selection outline
+- [x] Better block textures
 
 ### Player Interaction
 - [x] First-person camera control
@@ -68,12 +67,11 @@
 - [x] Hotbar (9 slots)
 - [x] Render distance slider
 - [x] Fog density slider
+- [x] Better UI
+
 
 ### Performance Targets
-- 100 FPS at render distance 4
-- Chunk generation < 50ms per chunk
-- Mesh generation < 20ms per chunk
-- Memory usage < 500MB for 9x9 chunk radius
+- 100 FPS at render distance 20
 
 ## Non-Functional Requirements
 
@@ -101,16 +99,17 @@
 ### Resource Files
 - Block textures: PNG format, 64x64 atlas
 
-## Future Enhancements
+## Future Enhancements or already done
 
 ### Planned Features
+- [x] extremely high render distance
 - [ ] Block entity system
 - [ ] Physics simulation
-- [ ] Water/liquid blocks
+- [x] Water/liquid blocks
 - [ ] underground Lighting system
 - [ ] main menu
 - [ ] Save/load world
 - [ ] fonts 
 - [ ] inventory system
-- [ ] biomes
+- [-] biomes [maybe i just cant find them]
 - [ ] Multiplayer support

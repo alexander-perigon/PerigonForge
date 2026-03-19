@@ -2,7 +2,7 @@
 
 A high-performance voxel engine built in C# using the OpenTK wrapper for OpenGL. Engineered for efficiency, PerigonForge utilizes advanced data structures and multi-threaded processing to handle large-scale procedural environments.
 
-![PerigonForge Screenshot](https://raw.githubusercontent.com/alexander-perigon/PerigonForge/refs/heads/main/images/Screenshot%202026-03-05%20164315.png)
+![PerigonForge Screenshot](./images/Screenshot%202026-03-19%20183607.png)
 
 ## License and Terms of Use
 

@@ -93,7 +93,7 @@
 - .NET 8.0 (net8.0)
 
 ### Build Outputs
-- Windows: VoxelEngine.exe
+- Windows: PerigonForge.exe
 - Cross-platform via Mono/.NET Core
 
 ### Resource Files
@@ -108,8 +108,8 @@
 - [x] Water/liquid blocks
 - [ ] underground Lighting system
 - [ ] main menu
-- [x] Save/load world
+- [ ] Save/load world
 - [ ] fonts 
-- [x] inventory system
+- [ ] inventory system
 - [-] biomes [maybe i just cant find them]
 - [ ] Multiplayer support

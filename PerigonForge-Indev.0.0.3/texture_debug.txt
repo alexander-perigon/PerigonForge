@@ -1,1 +1,1 @@
-Atlas loaded: 128x128 from C:\Users\alexa\Downloads\publish\Resources\Blocks\Atlas.png
+Atlas loaded: 128x128 from C:\Users\alexa\Downloads\PerigonForge-Indev.0.0.3\Resources\Blocks\Atlas.png

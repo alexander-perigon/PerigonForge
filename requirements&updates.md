@@ -108,8 +108,8 @@
 - [x] Water/liquid blocks
 - [ ] underground Lighting system
 - [ ] main menu
-- [ ] Save/load world
+- [x] Save/load world
 - [ ] fonts 
-- [ ] inventory system
+- [x] inventory system
 - [-] biomes [maybe i just cant find them]
 - [ ] Multiplayer support

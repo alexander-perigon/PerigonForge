@@ -122,8 +122,6 @@ namespace PerigonForge
         {
             if (_uniformCache.TryGetValue(name, out int loc)) return loc;
             loc = GL.GetUniformLocation(Handle, name);
-            // loc == -1 means the uniform was optimised away or doesn't exist.
-            // We cache it anyway to avoid repeated GL calls on missing uniforms.
             _uniformCache[name] = loc;
             return loc;
         }

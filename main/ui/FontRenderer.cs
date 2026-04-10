@@ -127,11 +127,6 @@ void main()
                 }
             }
             font.Dispose();
-
-            // ── Extract pixels from bitmap ─────────────────────────────────────
-            // System.Drawing Format32bppArgb is laid out in memory as B, G, R, A
-            // on Windows (little-endian ARGB word).  We want white glyphs in the
-            // alpha channel so OpenGL can tint them with a colour uniform.
             var   lockRect = new Rectangle(0, 0, AtlasWidth, AtlasHeight);
             var   bmpData  = bmp.LockBits(lockRect, ImageLockMode.ReadOnly,
                                            GdiPixelFormat.Format32bppArgb);

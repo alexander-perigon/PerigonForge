@@ -5,94 +5,320 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
-using System.Text.Json;
 using OpenTK.Mathematics;
 
 namespace PerigonForge
 {
+    public static class VoxelCrunch
+    {
+        private const byte TAG_RLE     = 0x01;
+        private const byte TAG_PALETTE = 0x02;
+
+        // ── RLE ────────────────────────────────────────────────────────────────
+
+        /// <summary>Encodes voxel data using RLE. Output starts with TAG_RLE byte.</summary>
+        public static byte[] Encode(byte[] voxels)
+        {
+            if (voxels == null || voxels.Length == 0) return Array.Empty<byte>();
+
+            // Pre-allocate worst-case: tag(1) + runs(voxels.Length * 3)
+            byte[] buf   = new byte[1 + voxels.Length * 3];
+            buf[0]       = TAG_RLE;
+            int    w     = 1;
+            byte   cur   = voxels[0];
+            int    count = 1;
+
+            for (int i = 1; i < voxels.Length; i++)
+            {
+                if (voxels[i] == cur && count < 65535)
+                {
+                    count++;
+                }
+                else
+                {
+                    buf[w++] = cur;
+                    buf[w++] = (byte)(count & 0xFF);
+                    buf[w++] = (byte)(count >> 8);
+                    cur   = voxels[i];
+                    count = 1;
+                }
+            }
+            buf[w++] = cur;
+            buf[w++] = (byte)(count & 0xFF);
+            buf[w++] = (byte)(count >> 8);
+
+            return buf[..w];
+        }
+
+        /// <summary>Decodes RLE-compressed voxel data (tag byte already consumed by caller).</summary>
+        private static void DecodeRLE(byte[] data, int start, byte[] result)
+        {
+            int pos = 0;
+            int len = result.Length;
+            for (int i = start; i + 3 <= data.Length && pos < len; i += 3)
+            {
+                byte blockId = data[i];
+                int  count   = data[i + 1] | (data[i + 2] << 8);
+                int  end     = Math.Min(pos + count, len);
+                while (pos < end) result[pos++] = blockId;
+            }
+        }
+
+        // ── Palette ────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Compresses voxel data: palette-packed when beneficial, otherwise RLE.
+        /// Output always starts with a TAG byte so Decompress is unambiguous.
+        /// </summary>
+        public static byte[] CompressWithPalette(byte[] voxels)
+        {
+            if (voxels == null || voxels.Length == 0) return Array.Empty<byte>();
+
+            // Fast path: check if all air (all zeros)
+            bool allAir = true;
+            for (int i = 0; i < voxels.Length; i++)
+            {
+                if (voxels[i] != 0) { allAir = false; break; }
+            }
+            if (allAir) return new byte[] { TAG_RLE, 0, 0, 0 }; // Single run of air
+
+            // Count unique non-air blocks
+            int uniqueCount = 0;
+            bool[] seen = new bool[256];
+            seen[0] = true; // air is always palette[0], don't count it separately
+            for (int i = 0; i < voxels.Length; i++)
+            {
+                byte b = voxels[i];
+                if (!seen[b]) { seen[b] = true; uniqueCount++; }
+            }
+            // uniqueCount now = number of distinct non-air blocks (0 means all-air)
+
+            // Only attempt palette if <= 15 distinct non-air block types
+            // (palette slots 1..N, slot 0 = air, fits in 4 bits max)
+            if (uniqueCount <= 15)
+            {
+                byte[] rle     = Encode(voxels);
+                byte[] palette = TryPalette(voxels, seen, uniqueCount)!;
+                if (palette != null && palette.Length < rle.Length) return palette;
+                return rle;
+            }
+
+            return Encode(voxels);
+        }
+
+        private static byte[]? TryPalette(byte[] voxels, bool[] seen, int uniqueNonAir)
+        {
+            // Build palette: [0]=air, [1..N]=block types
+            byte[] palette = new byte[1 + uniqueNonAir];
+            palette[0] = 0;
+            int pi = 1;
+            for (int b = 1; b < 256 && pi <= uniqueNonAir; b++)
+                if (seen[b]) palette[pi++] = (byte)b;
+
+            int paletteSize = palette.Length; // 1..16
+            int bitsPerBlock = paletteSize <= 2  ? 1 :
+                               paletteSize <= 4  ? 2 :
+                               paletteSize <= 8  ? 3 : 4;
+
+            // Build reverse lookup
+            byte[] rev = new byte[256];
+            for (byte i = 0; i < (byte)paletteSize; i++) rev[palette[i]] = i;
+
+            // Packed data size: ceil(voxels.Length * bitsPerBlock / 8)
+            int packedBytes = (voxels.Length * bitsPerBlock + 7) / 8;
+
+            // Layout: [TAG_PALETTE][paletteSize][palette bytes][packed data]
+            int totalSize = 1 + 1 + paletteSize + packedBytes;
+            byte[] result = new byte[totalSize];
+            result[0] = TAG_PALETTE;
+            result[1] = (byte)paletteSize;
+            Array.Copy(palette, 0, result, 2, paletteSize);
+
+            int dataStart = 2 + paletteSize;
+            int bitBuf    = 0, bitCount = 0, dst = dataStart;
+            int mask      = (1 << bitsPerBlock) - 1;
+
+            for (int i = 0; i < voxels.Length; i++)
+            {
+                bitBuf   |= (rev[voxels[i]] & mask) << bitCount;
+                bitCount += bitsPerBlock;
+                if (bitCount >= 8)
+                {
+                    result[dst++] = (byte)(bitBuf & 0xFF);
+                    bitBuf      >>= 8;
+                    bitCount     -= 8;
+                }
+            }
+            if (bitCount > 0) result[dst] = (byte)bitBuf;
+
+            return result;
+        }
+
+        // ── Decompress (unified) ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Decompresses voxel data regardless of format.
+        /// Reads the leading TAG byte to dispatch correctly.
+        /// Legacy data without a tag (from old saves) falls through to RLE.
+        /// </summary>
+        public static byte[] DecompressWithPalette(byte[] data, int expectedLength)
+        {
+            byte[] result = new byte[expectedLength];
+            if (data == null || data.Length == 0) return result;
+
+            byte tag = data[0];
+
+            if (tag == TAG_PALETTE)
+            {
+                DecodePalette(data, result);
+                return result;
+            }
+
+            if (tag == TAG_RLE)
+            {
+                DecodeRLE(data, 1, result);
+                return result;
+            }
+
+            // Legacy: no tag byte — treat entire buffer as RLE (old file format)
+            DecodeRLE(data, 0, result);
+            return result;
+        }
+
+        private static void DecodePalette(byte[] data, byte[] result)
+        {
+            if (data.Length < 2) return;
+            int paletteSize = data[1];
+            if (paletteSize < 1 || paletteSize > 16) return;
+            if (data.Length < 2 + paletteSize) return;
+
+            byte[] palette = new byte[paletteSize];
+            Array.Copy(data, 2, palette, 0, paletteSize);
+
+            int bitsPerBlock = paletteSize <= 2  ? 1 :
+                               paletteSize <= 4  ? 2 :
+                               paletteSize <= 8  ? 3 : 4;
+            int mask      = (1 << bitsPerBlock) - 1;
+            int dataStart = 2 + paletteSize;
+            int bitBuf    = 0, bitCount = 0, src = dataStart, pos = 0;
+            int maxPos    = result.Length;
+
+            while (pos < maxPos)
+            {
+                while (bitCount < bitsPerBlock && src < data.Length)
+                {
+                    bitBuf   |= data[src++] << bitCount;
+                    bitCount += 8;
+                }
+                if (bitCount < bitsPerBlock) break;
+                int idx = bitBuf & mask;
+                bitBuf   >>= bitsPerBlock;
+                bitCount  -= bitsPerBlock;
+                result[pos++] = idx < paletteSize ? palette[idx] : (byte)0;
+            }
+        }
+
+        // ── Legacy shim ────────────────────────────────────────────────────────
+        /// <summary>Kept for any existing call-sites that use the old API.</summary>
+        public static byte[] Decode(byte[] data, int expectedLength)
+            => DecompressWithPalette(data, expectedLength);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  WORLD
+    // ═══════════════════════════════════════════════════════════════════════════
+
     public sealed class World : IDisposable
     {
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  CONSTANTS
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
-        private const int    MAX_RETRIES           = 3;
-        private const int    MEM_INTERVAL          = 60;
-        private const long   REBUILD_INTERVAL_MS   = 120;
-        private const long   CHUNK_SAVE_INTERVAL_MS = 5000;
+        private const int    MAX_RETRIES            = 3;
+        private const int    MEM_INTERVAL           = 60;
+        private const long   REBUILD_INTERVAL_MS    = 120;
+        private const long   CHUNK_SAVE_INTERVAL_MS = 15_000;
 
-        private const int PRESSURE_TARGET        = 512;
-        private const int MAX_ENQUEUE_PER_CYCLE  = 16;
-        private const int MIN_ENQUEUE_PER_CYCLE  = 4;
-        private const int MAX_UNLOADS_PER_CYCLE  = 8;
-        private const int MIN_UNLOADS_PER_CYCLE  = 1;
+        private const int PRESSURE_TARGET       = 1024;
+        private const int MAX_ENQUEUE_PER_CYCLE = 8;   // Reduced for performance
+        private const int MIN_ENQUEUE_PER_CYCLE = 2;
+        private const int MAX_UNLOADS_PER_CYCLE = 4;   // Reduced for performance
+        private const int MIN_UNLOADS_PER_CYCLE = 1;
 
-        private const double MIN_BUDGET  = 1.0;
-        private const double MAX_BUDGET  = 6.0;
-        private const float  VAR_SMOOTH  = 0.08f;
+        private const double MIN_BUDGET = 1.5;
+        private const double MAX_BUDGET = 8.0;
+        private const float  VAR_SMOOTH = 0.08f;
 
-        private static readonly int GEN_WORKERS  = Math.Max(Environment.ProcessorCount / 2, 2);
-        private static readonly int MESH_WORKERS = Math.Max(Environment.ProcessorCount / 2, 2);
+        private static readonly int GEN_WORKERS  = 1;  // Reduced for performance
+        private static readonly int MESH_WORKERS = 1; // Reduced for performance
+
+        private static readonly byte[] FILE_MAGIC   = System.Text.Encoding.ASCII.GetBytes("PFWF");
+        private const           byte   FILE_VERSION = 3;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  CHUNK STORAGE
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
-        private readonly ConcurrentDictionary<Vector3i, Chunk>  _chunks        = new();
-        private readonly ConcurrentDictionary<Vector3i, bool>   _pendingChunks = new();
-        private readonly ConcurrentDictionary<Vector3i, int>    _failedChunks  = new();
+        private readonly ConcurrentDictionary<Vector3i, Chunk> _chunks        = new();
+        private readonly ConcurrentDictionary<Vector3i, bool>  _pendingChunks = new();
+        private readonly ConcurrentDictionary<Vector3i, int>   _failedChunks  = new();
 
-        private readonly ConcurrentQueue<Vector3i> _generateQueue = new();
-
-        private readonly ConcurrentQueue<Chunk>        _meshQueue      = new();
-        private readonly ConcurrentQueue<Chunk>        _dirtyQueue     = new();
+        private readonly ConcurrentQueue<Vector3i>         _generateQueue = new();
+        private readonly ConcurrentQueue<Chunk>            _meshQueue     = new();
+        private readonly ConcurrentQueue<Chunk>            _dirtyQueue    = new();
         private readonly ConcurrentDictionary<Chunk, bool> _pendingRemesh = new();
 
-        // FIX 3: GPU upload queues split into priority (block edits) and normal (fresh terrain)
-        private readonly ConcurrentQueue<Chunk> _priorityUploadQueue = new();
-        private readonly ConcurrentQueue<Chunk> _normalUploadQueue   = new();
+        private readonly ConcurrentQueue<Chunk>            _blockUpdateQueue = new(); // HIGH PRIORITY for player edits
 
-        private readonly ConcurrentQueue<GpuBufferIds> _glDeleteQueue = new();
+        private readonly ConcurrentQueue<Chunk>            _priorityUploadQueue = new();
+        private readonly ConcurrentQueue<Chunk>            _normalUploadQueue   = new();
+        private readonly ConcurrentQueue<GpuBufferIds>     _glDeleteQueue       = new();
+        private readonly ConcurrentDictionary<Vector3i, bool> _chunksInProgress = new();
 
         private readonly record struct GpuBufferIds(
-            int OpaqueVao, int OpaqueVbo, int OpaqueEbo,
+            int OpaqueVao,      int OpaqueVbo,      int OpaqueEbo,
             int TransparentVao, int TransparentVbo, int TransparentEbo);
 
 
-        // ═══════════════════════════════════════════════════════════════════════
-        //  CHUNK SAVE/LOAD
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
+        //  SAVE / LOAD
+        // ───────────────────────────────────────────────────────────────────────
 
-        private readonly string _saveDirectory;
-        private readonly ConcurrentDictionary<Vector3i, bool> _modifiedChunks = new();
-        private long _lastSaveTick = 0;
-        private bool _saveEnabled = false;
+        private readonly string _worldFilePath;
 
-        // FIX 2: Load world modifications once at startup instead of per chunk in GenerationWorker.
-        // Previously LoadWorldModifications() was called inside GenerationWorker for every chunk —
-        // meaning 100+ chunks would each read and parse the same file from disk, serialising all
-        // generation work behind disk I/O and causing a severe startup lag spike.
-        private Dictionary<Vector3i, (byte[] original, byte[] modified)> _cachedWorldMods = new();
+        // Stores VoxelCrunch-compressed bytes for every player-modified chunk.
+        private readonly ConcurrentDictionary<Vector3i, byte[]> _cachedMods = new();
 
-        // FIX 5: Guard flag prevents concurrent saves from stacking up if the previous
-        // background save hasn't finished yet.
-        private volatile bool _saving = false;
+        // Positions modified since the last write to disk.
+        private readonly ConcurrentDictionary<Vector3i, bool> _dirtyMods = new();
+
+        private volatile bool _saving       = false;
+        private long          _lastSaveTick = 0;
+        private bool          _saveEnabled  = false;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
+        //  BLOCK ROTATIONS
+        // ───────────────────────────────────────────────────────────────────────
+
+        private readonly ConcurrentDictionary<Vector3i, BlockRotation> _blockRotations = new();
+
+
+        // ───────────────────────────────────────────────────────────────────────
         //  WORKER INFRASTRUCTURE
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
-        private readonly SemaphoreSlim          _genSignal  = new(0, int.MaxValue);
-        private readonly SemaphoreSlim          _meshSignal = new(0, int.MaxValue);
-        private readonly CancellationTokenSource _cts       = new();
-        private volatile bool                   _running    = true;
+        private readonly SemaphoreSlim           _genSignal  = new(0, int.MaxValue);
+        private readonly SemaphoreSlim           _meshSignal = new(0, int.MaxValue);
+        private readonly CancellationTokenSource _cts        = new();
+        private volatile bool                    _running    = true;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  PLAYER / COORDINATOR STATE
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
         private volatile int  _pcX = int.MaxValue;
         private volatile int  _pcY = int.MaxValue;
@@ -103,17 +329,17 @@ namespace PerigonForge
         private long     _lastRebuildTick = 0;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  FRUSTUM
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
         public readonly Vector4[] frustumPlanes = new Vector4[6];
         private bool _frustumValid = false;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  ADAPTIVE UPLOAD BUDGET
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
         private double _uploadBudgetMs    = 2.0;
         private float  _frameTimeVariance = 0f;
@@ -121,22 +347,22 @@ namespace PerigonForge
         private float  _smoothness        = 0.5f;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  STATS / MEMORY
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
         private int  _memTimer;
         private long _totalMemoryBytes;
 
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
         //  PUBLIC PROPERTIES
-        // ═══════════════════════════════════════════════════════════════════════
+        // ───────────────────────────────────────────────────────────────────────
 
         public readonly TerrainGenerator terrainGenerator;
 
         public int   FullDetailDistance     { get; set; } = 1;
-        public int   RenderDistance         { get; set; } = 7;
+        public int   RenderDistance         { get; set; } = 2;
         public int   VerticalRenderDistance { get; set; } = 1;
 
         public int   LoadedChunks      => _chunks.Count;
@@ -152,7 +378,7 @@ namespace PerigonForge
         public int   GenTimeout         => 5;
         public int   MeshTimeout        => 4;
 
-        public string SaveDirectory => _saveDirectory;
+        public string SaveDirectory => Path.GetDirectoryName(_worldFilePath) ?? ".";
 
         private float ChunkPressure => MathF.Min((float)_chunks.Count / PRESSURE_TARGET, 1f);
 
@@ -167,34 +393,31 @@ namespace PerigonForge
         //  CONSTRUCTOR
         // ═══════════════════════════════════════════════════════════════════════
 
-        public World(int seed = 12345, string savePath = null)
+        public World(int seed = 12345, string? saveDir = null, string? worldName = null)
         {
             terrainGenerator = new TerrainGenerator(seed);
             BlockRegistry.Initialize();
 
-            _saveDirectory = savePath ?? Path.Combine(
+            // saveDir is now the world-specific folder (e.g., "saves/MyWorld")
+            // If not provided, use the default MyDocuments path
+            string dir = saveDir ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "PerigonForge Worlds", $"world_{seed}");
+                "PerigonForge Worlds");
 
-            if (!Directory.Exists(_saveDirectory))
-            {
-                try { Directory.CreateDirectory(_saveDirectory); } catch { }
-            }
-            _saveEnabled = true;
+            // World file is always "world.pwf" inside the world folder
+            _worldFilePath = Path.Combine(dir, "world.pwf");
 
-            // FIX 2: Load world modifications once here rather than once per chunk inside
-            // GenerationWorker. Each GenerationWorker thread previously called
-            // LoadWorldModifications() independently — opening, reading, and parsing the
-            // same .pfwf file dozens of times concurrently at world load, which both
-            // hammered disk I/O and caused file-sharing contention.
-            if (_saveEnabled)
+            try
             {
-                _cachedWorldMods = LoadWorldModifications();
-                string baseDir = Path.GetDirectoryName(_saveDirectory) ?? ".";
-                string worldFile = Path.Combine(baseDir, "world.pfwf");
-                Console.WriteLine($"[World] Save enabled. World file: {worldFile}");
-                Console.WriteLine($"[World] Loaded {_cachedWorldMods.Count} cached chunk modifications.");
+                Directory.CreateDirectory(dir);
+                _saveEnabled = true;
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[World] Save disabled: {ex.Message}");
+            }
+
+            if (_saveEnabled) LoadWorldFile();
 
             var factory = new TaskFactory(TaskCreationOptions.LongRunning,
                                           TaskContinuationOptions.None);
@@ -204,6 +427,8 @@ namespace PerigonForge
 
             Console.WriteLine($"[World] {GEN_WORKERS} gen + {MESH_WORKERS} mesh workers " +
                               $"(CPU={Environment.ProcessorCount})");
+            Console.WriteLine($"[World] World file: {_worldFilePath}");
+            Console.WriteLine($"[World] {_cachedMods.Count} modified chunks in save.");
         }
 
 
@@ -224,16 +449,26 @@ namespace PerigonForge
             }
 
             DrainGLDeletes(16);
-
-            // FIX 5: SaveModifiedChunks now fires disk I/O on a background Task.
-            SaveModifiedChunks();
+            TrySaveWorldAsync();
 
             if (++_memTimer >= MEM_INTERVAL)
             {
                 _memTimer = 0;
-                long total = 0;
-                foreach (var c in _chunks.Values) total += c.GetMemoryUsage();
-                _totalMemoryBytes = total;
+                // Optimized: calculate memory usage without enumerating all chunks every time
+                // Only sample a subset for performance
+                if (_chunks.Count > 0)
+                {
+                    long total = 0;
+                    int sampleCount = Math.Min(_chunks.Count, 64);
+                    int sampleStep = Math.Max(1, _chunks.Count / sampleCount);
+                    int idx = 0;
+                    foreach (var c in _chunks.Values)
+                    {
+                        if (idx++ % sampleStep == 0) total += c.GetMemoryUsage();
+                    }
+                    // Estimate total from sample
+                    _totalMemoryBytes = _chunks.Count > sampleCount ? total * sampleStep : total;
+                }
             }
         }
 
@@ -251,48 +486,29 @@ namespace PerigonForge
 
         public void UpdateFPS(float fps) { }
 
-        /// <summary>
-        /// Uploads ready meshes to the GPU.
-        ///
-        /// FIX 3: The original code started the Stopwatch BEFORE the first upload,
-        /// so the budget check fired immediately and effectively capped normal uploads
-        /// to exactly 1 chunk per frame regardless of budget. Now the timer starts
-        /// AFTER the first upload so that "at least one guaranteed upload" doesn't
-        /// eat into the frame budget for subsequent uploads.
-        /// </summary>
         public int UploadPendingChunks(ChunkRenderer renderer, double budgetMs = 0)
         {
             int uploaded = 0;
 
-            // Block-update remeshes always upload immediately, never rate-limited.
             while (_priorityUploadQueue.TryDequeue(out Chunk? c) && c != null)
             {
                 renderer.EnsureBuffers(c);
+                _chunksInProgress.TryRemove(c.ChunkPos, out _);
                 uploaded++;
             }
 
-            // Normal uploads: guarantee at least one per call, then honour the adaptive budget.
-            // The timer starts AFTER the first upload so the guaranteed upload is free.
             bool atLeastOne = false;
-            long start = 0;
+            long start      = 0;
             double ticksPerMs = Stopwatch.Frequency / 1000.0;
 
             while (_normalUploadQueue.TryDequeue(out Chunk? c) && c != null)
             {
                 renderer.EnsureBuffers(c);
+                _chunksInProgress.TryRemove(c.ChunkPos, out _);
                 uploaded++;
 
-                if (!atLeastOne)
-                {
-                    // First upload done — start the budget clock now.
-                    atLeastOne = true;
-                    start = Stopwatch.GetTimestamp();
-                }
-                else if ((Stopwatch.GetTimestamp() - start) / ticksPerMs >= _uploadBudgetMs)
-                {
-                    // Budget exhausted — stop uploading this frame.
-                    break;
-                }
+                if (!atLeastOne) { atLeastOne = true; start = Stopwatch.GetTimestamp(); }
+                else if ((Stopwatch.GetTimestamp() - start) / ticksPerMs >= _uploadBudgetMs) break;
             }
 
             return uploaded;
@@ -310,89 +526,114 @@ namespace PerigonForge
 
             while (!token.IsCancellationRequested && _running)
             {
-                long nowMs = Stopwatch.GetTimestamp() * 1000L / Stopwatch.Frequency;
-                bool timedRebuild = (nowMs - _lastRebuildTick) > REBUILD_INTERVAL_MS;
-
-                if (!_needsRebuild && !timedRebuild)
+                // FIX: Wrap entire loop body — any unhandled exception on a background
+                // thread crashes the whole process in .NET 6+. Log and keep running.
+                try
                 {
-                    Thread.Sleep(8);
-                    continue;
-                }
+                    long nowMs        = Stopwatch.GetTimestamp() * 1000L / Stopwatch.Frequency;
+                    bool timedRebuild = (nowMs - _lastRebuildTick) > REBUILD_INTERVAL_MS;
 
-                _needsRebuild    = false;
-                _lastRebuildTick = nowMs;
+                    if (!_needsRebuild && !timedRebuild) { Thread.Sleep(8); continue; }
 
-                var pc = new Vector3i(
-                    Interlocked.CompareExchange(ref _pcX, 0, 0),
-                    Interlocked.CompareExchange(ref _pcY, 0, 0),
-                    Interlocked.CompareExchange(ref _pcZ, 0, 0));
+                    _needsRebuild    = false;
+                    _lastRebuildTick = nowMs;
 
-                int rd   = RenderDistance;
-                int vd   = VerticalRenderDistance;
-                int rdSq = rd * rd;
-                int unloadHSq = (rd + 2) * (rd + 2);
-                int unloadVD  = vd + 2;
+                    var pc = new Vector3i(
+                        Interlocked.CompareExchange(ref _pcX, 0, 0),
+                        Interlocked.CompareExchange(ref _pcY, 0, 0),
+                        Interlocked.CompareExchange(ref _pcZ, 0, 0));
 
-                // ── Unload out-of-range chunks ─────────────────────────────────
-                toUnload.Clear();
-                foreach (var kvp in _chunks)
-                {
-                    var d = kvp.Key - pc;
-                    if (d.X * d.X + d.Z * d.Z > unloadHSq || Math.Abs(d.Y) > unloadVD)
-                        toUnload.Add((kvp.Key, kvp.Value));
-                }
-
-                toUnload.Sort((a, b) =>
-                {
-                    var da = a.key - pc;
-                    var db = b.key - pc;
-                    int sa = da.X * da.X + da.Y * da.Y + da.Z * da.Z;
-                    int sb = db.X * db.X + db.Y * db.Y + db.Z * db.Z;
-                    return sb.CompareTo(sa);
-                });
-
-                int unloadLimit = UnloadBudget;
-                for (int i = 0; i < toUnload.Count && i < unloadLimit; i++)
-                {
-                    var (key, _) = toUnload[i];
-                    if (_chunks.TryRemove(key, out Chunk? c) && c != null)
+                    if (Math.Abs(pc.X) > 100_000 || Math.Abs(pc.Y) > 1_000 || Math.Abs(pc.Z) > 100_000)
                     {
-                        ScheduleGLDelete(c);
-                        c.Dispose();
+                        Console.WriteLine($"[World] WARNING: Player chunk out of bounds: {pc}");
+                        Thread.Sleep(16);
+                        continue;
+                    }
+
+                    int rd        = RenderDistance;
+                    int vd        = VerticalRenderDistance;
+                    int fd        = FullDetailDistance;
+                    int rdSq      = rd * rd;
+                    int fdSq      = fd * fd;
+                    int unloadHSq = (rd + 2) * (rd + 2);
+                    int unloadVD  = vd + 2;
+
+                    // ── Unload out-of-range chunks ────────────────────────────
+                    toUnload.Clear();
+                    foreach (var kvp in _chunks)
+                    {
+                        var d = kvp.Key - pc;
+                        if (d.X * d.X + d.Z * d.Z > unloadHSq || Math.Abs(d.Y) > unloadVD)
+                            if (!_chunksInProgress.ContainsKey(kvp.Key))
+                                toUnload.Add((kvp.Key, kvp.Value));
+                    }
+
+                    toUnload.Sort((a, b) =>
+                    {
+                        var da = a.key - pc; var db = b.key - pc;
+                        return (db.X*db.X + db.Y*db.Y + db.Z*db.Z)
+                              .CompareTo(da.X*da.X + da.Y*da.Y + da.Z*da.Z);
+                    });
+
+                    int unloaded = 0;
+                    foreach (var (key, chunk) in toUnload)
+                    {
+                        if (unloaded >= UnloadBudget) break;
+                        if (_chunksInProgress.ContainsKey(key)) continue;
+                        if (chunk.HasModifications)
+                            _cachedMods[key] = VoxelCrunch.CompressWithPalette(chunk.GetCurrentVoxels());
+
+                        if (_chunks.TryRemove(key, out Chunk? c) && c != null)
+                        {
+                            ScheduleGLDelete(c);
+                            _chunksInProgress.TryRemove(key, out _);
+                            c.Dispose();
+                            unloaded++;
+                        }
+                    }
+
+                    // ── Queue missing chunks for generation ───────────────────
+                    toLoad.Clear();
+                    for (int x = -rd; x <= rd; x++)
+                    for (int y = -vd; y <= vd; y++)
+                    for (int z = -rd; z <= rd; z++)
+                    {
+                        int hSq = x * x + z * z;
+                        if (hSq > rdSq) continue;
+                        var pos = new Vector3i(pc.X + x, pc.Y + y, pc.Z + z);
+                        if (!_chunks.ContainsKey(pos) && !_pendingChunks.ContainsKey(pos))
+                            toLoad.Add((pos, hSq + y * y));
+                    }
+
+                    toLoad.Sort((a, b) => a.distSq.CompareTo(b.distSq));
+
+                    int enqueued = 0;
+                    foreach (var (pos, distSq) in toLoad)
+                    {
+                        bool immediate = distSq <= fdSq;
+                        if (!immediate && enqueued >= EnqueueBudget) break;
+
+                        if (Math.Abs(pos.X) > 100_000 || Math.Abs(pos.Y) > 1_000 || Math.Abs(pos.Z) > 100_000)
+                            continue;
+
+                        if (_chunks.ContainsKey(pos)) continue;
+                        if (_pendingChunks.TryAdd(pos, true))
+                        {
+                            _generateQueue.Enqueue(pos);
+                            _genSignal.Release();
+                            enqueued++;
+                        }
                     }
                 }
-
-                // ── Find missing chunks and queue for generation ───────────────
-                toLoad.Clear();
-                for (int x = -rd; x <= rd; x++)
-                for (int y = -vd; y <= vd; y++)
-                for (int z = -rd; z <= rd; z++)
+                catch (OperationCanceledException)
                 {
-                    int hSq = x * x + z * z;
-                    if (hSq > rdSq) continue;
-
-                    var pos = new Vector3i(pc.X + x, pc.Y + y, pc.Z + z);
-                    if (!_chunks.ContainsKey(pos) && !_pendingChunks.ContainsKey(pos))
-                        toLoad.Add((pos, hSq + y * y));
+                    // Token was cancelled — normal shutdown, exit cleanly.
+                    break;
                 }
-
-                toLoad.Sort((a, b) => a.distSq.CompareTo(b.distSq));
-
-                int enqueueLimit = EnqueueBudget;
-                int enqueuedThisPass = 0;
-
-                foreach (var (pos, distSq) in toLoad)
+                catch (Exception ex)
                 {
-                    bool isImmediate = distSq <= 4;
-                    if (!isImmediate && enqueuedThisPass >= enqueueLimit) break;
-
-                    if (_chunks.ContainsKey(pos)) continue;
-                    if (_pendingChunks.TryAdd(pos, true))
-                    {
-                        _generateQueue.Enqueue(pos);
-                        _genSignal.Release();
-                        enqueuedThisPass++;
-                    }
+                    Console.WriteLine($"[World] CoordinatorWorker error: {ex.Message}");
+                    Thread.Sleep(16); // Brief pause before retrying to avoid spin-crash
                 }
             }
         }
@@ -406,8 +647,27 @@ namespace PerigonForge
         {
             while (!token.IsCancellationRequested && _running)
             {
-                if (!_genSignal.Wait(5, token)) continue;
+                // FIX: _genSignal.Wait(timeout, token) throws OperationCanceledException
+                // when the token is cancelled (e.g. on Dispose). Previously uncaught,
+                // this killed the process. Now caught and used to exit cleanly.
+                try
+                {
+                    if (!_genSignal.Wait(5, token)) continue;
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[World] GenSignal error: {ex.Message}");
+                    continue;
+                }
+
                 if (!_generateQueue.TryDequeue(out Vector3i pos)) continue;
+
+                if (Math.Abs(pos.X) > 100_000 || Math.Abs(pos.Y) > 1_000 || Math.Abs(pos.Z) > 100_000)
+                {
+                    _pendingChunks.TryRemove(pos, out _);
+                    continue;
+                }
 
                 bool retrying = false;
                 try
@@ -420,38 +680,31 @@ namespace PerigonForge
                     if (!_chunks.TryAdd(pos, chunk)) { chunk.Dispose(); continue; }
 
                     try   { terrainGenerator.PlantTreesInChunk(chunk, this); }
-                    catch (Exception ex) { Console.WriteLine($"[World] Tree planting {pos}: {ex.Message}"); }
+                    catch (Exception ex) { Console.WriteLine($"[World] Tree {pos}: {ex.Message}"); }
 
+                    // Record the pristine terrain as the "original" so HasModifications
+                    // only flips true on real player edits — not on gen/load.
                     chunk.SaveOriginalVoxels();
 
-                    // FIX 2: Use the pre-loaded cache instead of reading from disk per chunk.
-                    // _cachedWorldMods is populated once in the constructor and is read-only
-                    // from this point on, so no locking is needed.
-                    if (_cachedWorldMods.TryGetValue(pos, out var modData))
+                    // Restore any previously saved player edits for this chunk.
+                    if (_cachedMods.TryGetValue(pos, out byte[]? compressed) && compressed != null)
                     {
-                        chunk.LoadOriginalVoxels(modData.original);
-                        chunk.SetAllVoxels(modData.modified);
-                        _modifiedChunks.TryAdd(pos, true);
+                        int vol = Chunk.CHUNK_SIZE * Chunk.CHUNK_SIZE * Chunk.CHUNK_SIZE;
+                        chunk.SetAllVoxels(VoxelCrunch.DecompressWithPalette(compressed, vol));
+                        // Player edits are now live — mark the chunk dirty for save,
+                        // but DON'T put it in _dirtyMods (it's already in _cachedMods
+                        // from the save file; no need to re-save it until it changes again).
+                        chunk.MarkModified();
                     }
 
                     chunk.IsGenerated = true;
                     _failedChunks.TryRemove(pos, out _);
 
-                    // FIX 1: Queue the chunk for meshing exactly once via the normal mesh
-                    // queue. The old code called TriggerChunkUpdate() twice which:
-                    //   (a) Enqueued the chunk itself 4 times (2 calls × ClearBuffers + EnqueueDirtyRemesh)
-                    //   (b) Enqueued all 6 neighbours twice each (12 extra dirty-queue entries)
-                    //   (c) Called ClearChunkMeshBuffers() before a VAO even existed — harmless
-                    //       but wasteful, and could race with the mesh worker.
-                    // Simply pushing to _meshQueue and signalling once is correct and sufficient.
                     if (!chunk.IsEmpty())
                     {
                         _meshQueue.Enqueue(chunk);
                         _meshSignal.Release();
 
-                        // Kick neighbours so they rebuild their shared faces now that this
-                        // chunk exists. Each neighbour is enqueued at most once thanks to
-                        // the _pendingRemesh guard inside EnqueueNeighborRemesh.
                         EnqueueNeighborRemesh(pos.X - 1, pos.Y, pos.Z);
                         EnqueueNeighborRemesh(pos.X + 1, pos.Y, pos.Z);
                         EnqueueNeighborRemesh(pos.X, pos.Y - 1, pos.Z);
@@ -482,8 +735,7 @@ namespace PerigonForge
                 }
                 finally
                 {
-                    if (!retrying)
-                        _pendingChunks.TryRemove(pos, out _);
+                    if (!retrying) _pendingChunks.TryRemove(pos, out _);
                 }
             }
         }
@@ -497,22 +749,33 @@ namespace PerigonForge
         {
             while (!token.IsCancellationRequested && _running)
             {
-                if (!_meshSignal.Wait(4, token)) continue;
+                // FIX: Same as GenerationWorker — _meshSignal.Wait throws
+                // OperationCanceledException on shutdown. Catch it to exit cleanly.
+                try
+                {
+                    if (!_meshSignal.Wait(4, token)) continue;
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[World] MeshSignal error: {ex.Message}");
+                    continue;
+                }
 
                 Chunk? chunk;
                 if (!_dirtyQueue.TryDequeue(out chunk))
                     _meshQueue.TryDequeue(out chunk);
-
-                if (chunk == null)
-                    continue;
+                if (chunk == null) continue;
 
                 if (!chunk.IsGenerated || chunk.IsEmpty())
                 {
                     _pendingRemesh.TryRemove(chunk, out _);
+                    _chunksInProgress.TryRemove(chunk.ChunkPos, out _);
                     continue;
                 }
 
                 chunk.IsBlockUpdate = true;
+                _chunksInProgress.TryAdd(chunk.ChunkPos, true);
 
                 if (chunk.VAO3D != 0 || chunk.VAOTransparent != 0)
                 {
@@ -530,15 +793,8 @@ namespace PerigonForge
                     MeshBuilder.Build3DMesh(chunk, this);
                     _failedChunks.TryRemove(chunk.ChunkPos, out _);
 
-                    if (chunk.IsBlockUpdate)
-                    {
-                        chunk.IsBlockUpdate = false;
-                        _priorityUploadQueue.Enqueue(chunk);
-                    }
-                    else
-                    {
-                        _normalUploadQueue.Enqueue(chunk);
-                    }
+                    if (chunk.IsBlockUpdate) { chunk.IsBlockUpdate = false; _priorityUploadQueue.Enqueue(chunk); }
+                    else                     { _normalUploadQueue.Enqueue(chunk); }
                 }
                 catch (Exception ex)
                 {
@@ -559,6 +815,7 @@ namespace PerigonForge
                     {
                         Console.WriteLine($"[World] Mesh {chunk.ChunkPos} gave up after {MAX_RETRIES} retries");
                         _failedChunks.TryRemove(chunk.ChunkPos, out _);
+                        _chunksInProgress.TryRemove(chunk.ChunkPos, out _);
                     }
                 }
                 finally
@@ -604,10 +861,8 @@ namespace PerigonForge
             ToChunkAndLocal(x, y, z,
                 out int cx, out int cy, out int cz,
                 out int lx, out int ly, out int lz);
-
             return _chunks.TryGetValue(new Vector3i(cx, cy, cz), out Chunk? c)
-                ? c.GetVoxel(lx, ly, lz)
-                : BlockType.Air;
+                ? c.GetVoxel(lx, ly, lz) : BlockType.Air;
         }
 
         public Chunk? GetChunk(int cx, int cy, int cz)
@@ -618,41 +873,47 @@ namespace PerigonForge
 
         public void SetVoxel(int x, int y, int z, BlockType blockType)
         {
-            if (!TryGetChunkForVoxel(x, y, z,
-                    out Chunk? chunk, out int lx, out int ly, out int lz)) return;
-
+            if (!TryGetChunkForVoxel(x, y, z, out Chunk? chunk, out int lx, out int ly, out int lz)) return;
             chunk!.SetVoxel(lx, ly, lz, blockType);
             OnVoxelChanged(chunk, x, y, z, lx, ly, lz);
         }
 
         public void SetVoxelById(int x, int y, int z, int blockId)
         {
-            if (!TryGetChunkForVoxel(x, y, z,
-                    out Chunk? chunk, out int lx, out int ly, out int lz)) return;
-
+            if (!TryGetChunkForVoxel(x, y, z, out Chunk? chunk, out int lx, out int ly, out int lz)) return;
             chunk!.SetVoxelById(lx, ly, lz, blockId);
             OnVoxelChanged(chunk, x, y, z, lx, ly, lz);
         }
 
+        public void SetVoxelWithRotation(int x, int y, int z, BlockType blockType,
+                                         int rotationY, int rotationX = 0)
+        {
+            if (!TryGetChunkForVoxel(x, y, z, out Chunk? chunk, out int lx, out int ly, out int lz)) return;
+            chunk!.SetVoxel(lx, ly, lz, blockType);
+            _blockRotations[new Vector3i(x, y, z)] = new BlockRotation(rotationX, rotationY);
+            OnVoxelChanged(chunk, x, y, z, lx, ly, lz);
+        }
+
+        public BlockRotation GetBlockRotation(int x, int y, int z)
+            => _blockRotations.TryGetValue(new Vector3i(x, y, z), out var r) ? r : new BlockRotation(0, 0);
+
         private bool TryGetChunkForVoxel(int x, int y, int z,
             out Chunk? chunk, out int lx, out int ly, out int lz)
         {
-            ToChunkAndLocal(x, y, z,
-                out int cx, out int cy, out int cz,
-                out lx, out ly, out lz);
+            ToChunkAndLocal(x, y, z, out int cx, out int cy, out int cz, out lx, out ly, out lz);
             return _chunks.TryGetValue(new Vector3i(cx, cy, cz), out chunk);
         }
 
-        private void OnVoxelChanged(Chunk chunk, int wx, int wy, int wz,
-                                    int lx, int ly, int lz)
+        private void OnVoxelChanged(Chunk chunk, int wx, int wy, int wz, int lx, int ly, int lz)
         {
             ClearChunkMeshBuffers(chunk);
             EnqueueDirtyRemesh(chunk);
 
-            SaveChunkModified(chunk);
+            // Mark for save — fires only on real player edits.
+            chunk.MarkModified();
+            _dirtyMods.TryAdd(chunk.ChunkPos, true);
 
-            ToChunkAndLocal(wx, wy, wz,
-                out int cx, out int cy, out int cz, out _, out _, out _);
+            ToChunkAndLocal(wx, wy, wz, out int cx, out int cy, out int cz, out _, out _, out _);
 
             if (lx == 0)                  EnqueueNeighborRemesh(cx - 1, cy, cz);
             if (lx == Chunk.CHUNK_SIZE-1) EnqueueNeighborRemesh(cx + 1, cy, cz);
@@ -683,8 +944,7 @@ namespace PerigonForge
 
         private void EnqueueNeighborRemesh(int cx, int cy, int cz)
         {
-            if (_chunks.TryGetValue(new Vector3i(cx, cy, cz), out Chunk? c) &&
-                c != null && !c.IsEmpty())
+            if (_chunks.TryGetValue(new Vector3i(cx, cy, cz), out Chunk? c) && c != null && !c.IsEmpty())
             {
                 c.IsBlockUpdate = true;
                 EnqueueDirtyRemesh(c);
@@ -709,31 +969,37 @@ namespace PerigonForge
 
         public bool IsChunkVisible(Chunk chunk, Vector3 cam)
         {
-            var center = chunk.WorldPosition + new Vector3(Chunk.CHUNK_SIZE * 0.5f);
+            var   center  = chunk.WorldPosition + new Vector3(Chunk.CHUNK_SIZE * 0.5f);
             float maxDist = RenderDistance * Chunk.CHUNK_SIZE * 1.5f;
-
-            var d = center - cam;
-            if (d.X * d.X + d.Y * d.Y + d.Z * d.Z > maxDist * maxDist) return false;
+            var   d       = center - cam;
+            if (d.X*d.X + d.Y*d.Y + d.Z*d.Z > maxDist*maxDist) return false;
             if (!_frustumValid) return true;
 
             float r = Chunk.CHUNK_CULL_RADIUS;
             foreach (var p in frustumPlanes)
-                if (p.X * center.X + p.Y * center.Y + p.Z * center.Z + p.W < -r) return false;
+                if (p.X*center.X + p.Y*center.Y + p.Z*center.Z + p.W < -r) return false;
 
             return true;
         }
 
         private static Vector4 NormalizePlane(float x, float y, float z, float w)
         {
-            float len = MathF.Sqrt(x * x + y * y + z * z);
-            return len > 0f ? new Vector4(x / len, y / len, z / len, w / len)
-                            : new Vector4(x, y, z, w);
+            float len = MathF.Sqrt(x*x + y*y + z*z);
+            return len > 0f ? new Vector4(x/len, y/len, z/len, w/len) : new Vector4(x, y, z, w);
         }
 
 
         // ═══════════════════════════════════════════════════════════════════════
         //  PUBLIC HELPERS
         // ═══════════════════════════════════════════════════════════════════════
+
+        public List<Chunk> GetChunksSnapshot()
+        {
+            var snap = new List<Chunk>(_chunks.Count);
+            foreach (var c in _chunks.Values)
+                if (c != null && !c.IsDisposed) snap.Add(c);
+            return snap;
+        }
 
         public IEnumerable<Chunk> GetChunks() => _chunks.Values;
 
@@ -756,8 +1022,7 @@ namespace PerigonForge
             (int)Math.Floor(pos.Z / Chunk.CHUNK_SIZE));
 
         private static void ToChunkAndLocal(int x, int y, int z,
-            out int cx, out int cy, out int cz,
-            out int lx, out int ly, out int lz)
+            out int cx, out int cy, out int cz, out int lx, out int ly, out int lz)
         {
             int s = Chunk.CHUNK_SIZE;
             cx = x >= 0 ? x / s : (x - s + 1) / s;
@@ -770,159 +1035,180 @@ namespace PerigonForge
 
 
         // ═══════════════════════════════════════════════════════════════════════
-        //  CHUNK SAVE/LOAD IMPLEMENTATION
+        //  SAVE  —  single Base64 world file, background task, 15-second interval
         // ═══════════════════════════════════════════════════════════════════════
 
-        public void SaveChunkModified(Chunk chunk)
+        private void TrySaveWorldAsync()
         {
-            if (!_saveEnabled || chunk == null) return;
-            _modifiedChunks.TryAdd(chunk.ChunkPos, true);
-        }
-
-        /// <summary>
-        /// FIX 5: Disk save is now kicked off as a background Task so that the main
-        /// thread never blocks on file I/O. A volatile bool guard prevents multiple
-        /// concurrent saves from stacking up if disk is slow.
-        /// </summary>
-        public void SaveModifiedChunks()
-        {
-            if (!_saveEnabled || _modifiedChunks.IsEmpty) return;
+            if (!_saveEnabled || _dirtyMods.IsEmpty) return;
 
             long nowMs = Stopwatch.GetTimestamp() * 1000L / Stopwatch.Frequency;
             if ((nowMs - _lastSaveTick) < CHUNK_SAVE_INTERVAL_MS) return;
             _lastSaveTick = nowMs;
 
-            // Skip if a save is already in progress to avoid stacking up Tasks.
             if (_saving) return;
             _saving = true;
 
+            var snapshot = new List<Vector3i>(_dirtyMods.Count);
+            foreach (var kv in _dirtyMods) snapshot.Add(kv.Key);
+
             Task.Run(() =>
             {
-                try   { SaveWorldToFile(); }
-                catch (Exception ex) { Console.WriteLine($"[World] Background save failed: {ex.Message}"); }
-                finally { _saving = false; }
+                try 
+                { 
+                    WriteWorldFile(snapshot); 
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"[World] Save failed: {ex.Message}"); 
+                }
+                finally 
+                { 
+                    _saving = false; 
+                }
             });
         }
 
-        private void SaveWorldToFile()
+        private void WriteWorldFile(List<Vector3i> dirtyPositions)
         {
-            if (!_saveEnabled) return;
+            // Refresh _cachedMods for every dirty chunk still in memory.
+            // GetCurrentVoxels() returns the chunk's own flat cache — no allocation.
+            // CompressWithPalette reads it synchronously and returns a new compressed array.
+            foreach (var pos in dirtyPositions)
+            {
+                if (_chunks.TryGetValue(pos, out Chunk? chunk) && chunk != null)
+                    _cachedMods[pos] = VoxelCrunch.CompressWithPalette(chunk.GetCurrentVoxels());
+            }
+
+            using var ms     = new MemoryStream(64 * 1024);
+            using var writer = new BinaryWriter(ms);
+
+            writer.Write(FILE_MAGIC);
+            writer.Write(FILE_VERSION);
+            writer.Write(_cachedMods.Count);
+
+            int s = Chunk.CHUNK_SIZE;
+
+            foreach (var kv in _cachedMods)
+            {
+                var pos = kv.Key;
+                var rle = kv.Value;
+
+                writer.Write(pos.X);
+                writer.Write(pos.Y);
+                writer.Write(pos.Z);
+                writer.Write(rle.Length);
+                writer.Write(rle);
+
+                long rotCountOffset = ms.Position;
+                writer.Write(0);
+                int rotCount = 0;
+
+                foreach (var rkv in _blockRotations)
+                {
+                    var bk  = rkv.Key;
+                    int bcx = bk.X >= 0 ? bk.X / s : (bk.X - s + 1) / s;
+                    int bcy = bk.Y >= 0 ? bk.Y / s : (bk.Y - s + 1) / s;
+                    int bcz = bk.Z >= 0 ? bk.Z / s : (bk.Z - s + 1) / s;
+                    if (bcx != pos.X || bcy != pos.Y || bcz != pos.Z) continue;
+
+                    writer.Write(bk.X); writer.Write(bk.Y); writer.Write(bk.Z);
+                    writer.Write(rkv.Value.RotationX);
+                    writer.Write(rkv.Value.RotationY);
+                    rotCount++;
+                }
+
+                long endOffset = ms.Position;
+                ms.Position    = rotCountOffset;
+                writer.Write(rotCount);
+                ms.Position    = endOffset;
+            }
+
+            writer.Flush();
+
+            string base64 = Convert.ToBase64String(ms.GetBuffer(), 0, (int)ms.Length);
+            string tmp    = _worldFilePath + ".tmp";
+            File.WriteAllText(tmp, base64);
+            File.Move(tmp, _worldFilePath, overwrite: true);
+
+            foreach (var pos in dirtyPositions) _dirtyMods.TryRemove(pos, out _);
+
+            Console.WriteLine($"[World] Saved {_cachedMods.Count} chunks → {_worldFilePath} " +
+                              $"({base64.Length} chars)");
+        }
+
+        private void LoadWorldFile()
+        {
+            if (!File.Exists(_worldFilePath)) return;
 
             try
             {
-                string baseDir = Path.GetDirectoryName(_saveDirectory) ?? ".";
-                string worldFile = Path.Combine(baseDir, "world.pfwf");
+                string base64 = File.ReadAllText(_worldFilePath).Trim();
+                byte[] data   = Convert.FromBase64String(base64);
 
-                var chunksToSave = new List<(Vector3i pos, byte[] original, byte[] modified)>();
+                using var ms     = new MemoryStream(data);
+                using var reader = new BinaryReader(ms);
 
-                foreach (var kvp in _modifiedChunks)
+                byte[] magic = reader.ReadBytes(4);
+                if (System.Text.Encoding.ASCII.GetString(magic) != "PFWF")
                 {
-                    if (_chunks.TryGetValue(kvp.Key, out Chunk? chunk) && chunk != null)
-                    {
-                        if (chunk.HasUnsavedChanges())
-                        {
-                            byte[]? original = chunk.GetOriginalVoxels();
-                            byte[] modified = chunk.GetCurrentVoxels();
-
-                            if (original == null)
-                                original = modified;
-
-                            chunksToSave.Add((chunk.ChunkPos, original, modified));
-                        }
-                    }
+                    Console.WriteLine("[World] World file has invalid header — ignoring.");
+                    return;
                 }
 
-                using (var fs = new FileStream(worldFile, FileMode.Create, FileAccess.Write))
-                using (var writer = new BinaryWriter(fs))
+                /* byte version = */ reader.ReadByte();
+                int chunkCount = reader.ReadInt32();
+
+                for (int i = 0; i < chunkCount; i++)
                 {
-                    writer.Write(System.Text.Encoding.ASCII.GetBytes("PFWF"));
-                    writer.Write(1); // version
-                    writer.Write(chunksToSave.Count);
+                    var pos = new Vector3i(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
 
-                    foreach (var (pos, original, modified) in chunksToSave)
+                    int    rleLen = reader.ReadInt32();
+                    byte[] rle    = reader.ReadBytes(rleLen);
+
+                    _cachedMods[pos] = rle;
+                    int rotCount = reader.ReadInt32();
+                    for (int r = 0; r < rotCount; r++)
                     {
-                        writer.Write(pos.X);
-                        writer.Write(pos.Y);
-                        writer.Write(pos.Z);
-
-                        writer.Write(original.Length);
-                        writer.Write(original);
-
-                        writer.Write(modified.Length);
-                        writer.Write(modified);
+                        var bpos = new Vector3i(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+                        int rotX = reader.ReadInt32();
+                        int rotY = reader.ReadInt32();
+                        _blockRotations[bpos] = new BlockRotation(rotX, rotY);
                     }
                 }
-
-                Console.WriteLine($"[World] Saved {chunksToSave.Count} chunks to world.pfwf");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[World] Failed to save world: {ex.Message}");
+                Console.WriteLine($"[World] Failed to load world file: {ex.Message}");
             }
         }
 
+        /// <summary>Synchronous flush — call just before the application exits.</summary>
         public void SaveAllChunks()
         {
             if (!_saveEnabled) return;
-            Console.WriteLine($"[World] Saving {_modifiedChunks.Count} modified chunks...");
-            // Call synchronously on shutdown — we're not on the main render thread here.
-            SaveWorldToFile();
-            Console.WriteLine("[World] World save complete.");
+
+            // Collect all known modified positions: dirty (unsaved edits) +
+            // any still-loaded chunks that have modifications not yet in _dirtyMods.
+            var all = new HashSet<Vector3i>();
+            foreach (var kv in _dirtyMods) all.Add(kv.Key);
+            foreach (var kv in _chunks)
+                if (kv.Value.HasModifications) all.Add(kv.Key);
+
+            if (all.Count == 0) return;
+
+            Console.WriteLine($"[World] Flushing {all.Count} modified chunks on shutdown…");
+            WriteWorldFile(new List<Vector3i>(all));
+        }
+
+        // ── Legacy shims ───────────────────────────────────────────────────────
+        public void SaveChunkModified(Chunk chunk)
+        {
+            if (chunk != null) _dirtyMods.TryAdd(chunk.ChunkPos, true);
         }
 
         public Dictionary<Vector3i, (byte[] original, byte[] modified)> LoadWorldModifications()
-        {
-            var result = new Dictionary<Vector3i, (byte[] original, byte[] modified)>();
-
-            if (!_saveEnabled) return result;
-
-            try
-            {
-                string baseDir = Path.GetDirectoryName(_saveDirectory) ?? ".";
-                string worldFile = Path.Combine(baseDir, "world.pfwf");
-
-                if (!File.Exists(worldFile))
-                    return result;
-
-                using (var fs = new FileStream(worldFile, FileMode.Open, FileAccess.Read))
-                using (var reader = new BinaryReader(fs))
-                {
-                    string header = System.Text.Encoding.ASCII.GetString(reader.ReadBytes(4));
-                    if (header != "PFWF")
-                    {
-                        Console.WriteLine("[World] Invalid world file header");
-                        return result;
-                    }
-
-                    int version    = reader.ReadInt32();
-                    int chunkCount = reader.ReadInt32();
-
-                    for (int i = 0; i < chunkCount; i++)
-                    {
-                        int cx = reader.ReadInt32();
-                        int cy = reader.ReadInt32();
-                        int cz = reader.ReadInt32();
-                        Vector3i pos = new Vector3i(cx, cy, cz);
-
-                        int originalLen = reader.ReadInt32();
-                        byte[] original = reader.ReadBytes(originalLen);
-
-                        int modifiedLen = reader.ReadInt32();
-                        byte[] modified = reader.ReadBytes(modifiedLen);
-
-                        result[pos] = (original, modified);
-                    }
-                }
-
-                Console.WriteLine($"[World] Loaded {result.Count} chunk modifications from world.pfwf");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[World] Failed to load world: {ex.Message}");
-            }
-
-            return result;
-        }
+            => new();
 
 
         // ═══════════════════════════════════════════════════════════════════════

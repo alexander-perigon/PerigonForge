@@ -1,4 +1,4 @@
-# PerigonForge - Requirements
+# PerigonForge - Requirements & Updates
 
 ## System Requirements
 
@@ -28,6 +28,8 @@
 - OpenGL 4.3 or higher
 - GLSL 4.30 compatible shaders
 - Multi-threaded processor (minimum 2 cores)
+
+## Implemented Features
 
 ### World Generation
 - [x] Procedural terrain
@@ -68,7 +70,29 @@
 - [x] Render distance slider
 - [x] Fog density slider
 - [x] Better UI
+- [x] Full inventory system with drag & drop (45 slots, 5 rows × 9 columns)
+- [x] Inventory UI with slot selection
+- [x] Block preview in inventory
 
+### Particle Systems
+- [x] Block break particles
+- [x] Block place particles
+- [x] Rain particle system
+- [x] Rain splash on water
+- [x] Steam vapor rising from blocks
+- [x] Weather system (rain, sun, clouds)
+
+### Audio
+- [x] Sound manager
+- [x] Background music playback
+- [x] Audio loading and streaming
+
+### Model Loading
+- [x] OBJ model loader
+- [x] Custom block models (stairs, slabs, ladders, chairs)
+## soon updates
+- [ ] Multiplayer
+- [ ] Mini-game creation
 
 ### Performance Targets
 - 100 FPS at render distance 20
@@ -99,17 +123,21 @@
 ### Resource Files
 - Block textures: PNG format, 64x64 atlas
 
-## Future Enhancements or already done
+## Future Enhancements
 
 ### Planned Features
 - [x] extremely high render distance
-- [ ] Block entity system
-- [ ] Physics simulation
+- [x] Block entity system
+- [x] Physics simulation (basic movement/physics)
 - [x] Water/liquid blocks
 - [ ] underground Lighting system
-- [ ] main menu
-- [ ] Save/load world
+- [x] main menu
+- [x/-] Save/load world
 - [ ] fonts 
-- [ ] inventory system
-- [-] biomes [maybe i just cant find them]
-- [ ] Multiplayer support
+- [x] inventory system (complete with 45 slots, drag/drop)
+- [ ] biomes 
+
+
+---
+
+*Last updated: April 1, 2026*

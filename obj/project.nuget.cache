@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "xoutEJeTOkE=",
+  "dgSpecHash": "vpDGXUo6BTM=",
   "success": true,
-  "projectFilePath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
+  "projectFilePath": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\alexa\\.nuget\\packages\\microsoft.net.illink.tasks\\8.0.22\\microsoft.net.illink.tasks.8.0.22.nupkg.sha512",
     "C:\\Users\\alexa\\.nuget\\packages\\microsoft.win32.systemevents\\8.0.0\\microsoft.win32.systemevents.8.0.0.nupkg.sha512",
     "C:\\Users\\alexa\\.nuget\\packages\\opentk\\4.8.0\\opentk.4.8.0.nupkg.sha512",
     "C:\\Users\\alexa\\.nuget\\packages\\opentk.audio.openal\\4.8.0\\opentk.audio.openal.4.8.0.nupkg.sha512",
@@ -17,7 +18,10 @@
     "C:\\Users\\alexa\\.nuget\\packages\\opentk.windowing.desktop\\4.8.0\\opentk.windowing.desktop.4.8.0.nupkg.sha512",
     "C:\\Users\\alexa\\.nuget\\packages\\opentk.windowing.graphicslibraryframework\\4.8.0\\opentk.windowing.graphicslibraryframework.4.8.0.nupkg.sha512",
     "C:\\Users\\alexa\\.nuget\\packages\\system.drawing.common\\8.0.0\\system.drawing.common.8.0.0.nupkg.sha512",
-    "C:\\Users\\alexa\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\5.0.0\\system.runtime.compilerservices.unsafe.5.0.0.nupkg.sha512"
+    "C:\\Users\\alexa\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\5.0.0\\system.runtime.compilerservices.unsafe.5.0.0.nupkg.sha512",
+    "C:\\Users\\alexa\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.22\\microsoft.netcore.app.runtime.win-x64.8.0.22.nupkg.sha512",
+    "C:\\Users\\alexa\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.22\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.22.nupkg.sha512",
+    "C:\\Users\\alexa\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.22\\microsoft.aspnetcore.app.runtime.win-x64.8.0.22.nupkg.sha512"
   ],
   "logs": []
 }

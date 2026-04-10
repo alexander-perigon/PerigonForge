@@ -7,6 +7,8 @@ namespace PerigonForge
     /// Hotbar system — the hotbar IS the bottom row of the inventory (slots 36-44).
     /// Reading and writing go through the shared InventorySystem so the two are
     /// always in sync without any copying.
+    /// 
+    /// In creative mode, blocks are provided with unlimited quantity.
     /// </summary>
     public class HotbarSystem
     {
@@ -64,6 +66,13 @@ namespace PerigonForge
             if (hotbarIndex < 0 || hotbarIndex >= SlotsPerHotbar)
                 return InventorySystem.InventorySlot.Empty;
             return _inventory.GetSlot(HotbarStartSlot + hotbarIndex);
+        }
+
+        /// <summary>Returns the selected block type with unlimited quantity for creative mode.</summary>
+        public BlockType? GetSelectedBlockCreative()
+        {
+            var slot = _inventory.GetSlot(HotbarStartSlot + _currentSlotIndex);
+            return slot.IsEmpty ? null : slot.BlockType;
         }
 
         // ── Static helpers (used by InventoryUI) ──────────────────────────────────

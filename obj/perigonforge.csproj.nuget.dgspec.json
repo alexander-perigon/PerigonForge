@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj": {}
+    "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj": {}
   },
   "projects": {
-    "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj": {
+    "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
+        "projectUniqueName": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
         "projectName": "PerigonForge",
-        "projectPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
+        "projectPath": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
         "packagesPath": "C:\\Users\\alexa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\obj\\",
+        "outputPath": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\alexa\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -44,6 +44,12 @@
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows",
           "dependencies": {
+            "Microsoft.NET.ILLink.Tasks": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[8.0.22, )",
+              "autoReferenced": true
+            },
             "OpenTK": {
               "target": "Package",
               "version": "[4.8.0, )"
@@ -64,12 +70,31 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Runtime.win-x64",
+              "version": "[8.0.22, 8.0.22]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Runtime.win-x64",
+              "version": "[8.0.22, 8.0.22]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+              "version": "[8.0.22, 8.0.22]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.100/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "win-x64": {
+          "#import": []
         }
       }
     }

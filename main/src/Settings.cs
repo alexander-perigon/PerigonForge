@@ -5,12 +5,11 @@ namespace PerigonForge
 {
     public class Settings
     {
-        private int renderDistance = 4;  
-        private int fullDetailDistance = 1;
-        private int verticalRenderDistance = 1;
-        private float fogStart = 32f; 
-        private float fogEnd = 128f; 
-        private int cloudQuality = 2;  
+        private int renderDistance = 5;  // Starting default - minimal for max performance
+        private int fullDetailDistance = 1;  // Starting default
+        private int verticalRenderDistance = 1;  // Starting default
+        private float fogStart = 44f; 
+        private float fogEnd = 80f; 
         
 
         public Keys KeyForward = Keys.W;
@@ -36,9 +35,14 @@ namespace PerigonForge
         // UI state
         public bool IsInSettings { get; set; } = false;
         
-        public const int MAX_RENDER_DISTANCE = 12;  // Reduced from 30 to 12 for better performance
-        public const int MAX_FULL_DETAIL_DISTANCE = 6;  // Reduced from 12 to 6 for better performance
-        public const int MAX_VERTICAL_RENDER_DISTANCE = 3;  // Max vertical render distance
+        // Maximum pixel dimension limits for display/rendering
+        public const int MAX_WINDOW_WIDTH = 3840;   // 4K max width
+        public const int MAX_WINDOW_HEIGHT = 2160;  // 4K max height
+
+        // Increased limits to support far render distance for better visuals
+        public const int MAX_RENDER_DISTANCE = 20;  // Support up to 20 chunks (640 blocks)
+        public const int MAX_FULL_DETAIL_DISTANCE = 10;  // Full detail up to 10 chunks
+        public const int MAX_VERTICAL_RENDER_DISTANCE = 4;  // Increased vertical render distance
         
         // Graphics properties - fog is auto-calculated based on render distance
         public int RenderDistance
@@ -48,11 +52,11 @@ namespace PerigonForge
             {
                 renderDistance = Math.Clamp(value, 1, MAX_RENDER_DISTANCE);
                 if (fullDetailDistance > renderDistance) fullDetailDistance = renderDistance;
-                // Auto-calculate fog based on render distance
+                // Auto-calculate fog based on render distance with progressive falloff
                 int chunkSize = 32;
-                // FogStart is set to 25% of max distance, so fog starts appearing gradually
-                fogStart = renderDistance * chunkSize * 0.25f;
-                fogEnd = renderDistance * chunkSize;
+                // FogStart at 30% and FogEnd at 95% of max distance for smooth transition
+                fogStart = renderDistance * chunkSize * 0.30f;
+                fogEnd = renderDistance * chunkSize * 0.95f;
             }
         }
         
@@ -83,11 +87,6 @@ namespace PerigonForge
             set => fogEnd = Math.Clamp(value, fogStart + 1, 1000);
         }
         
-        public int CloudQuality
-        {
-            get => cloudQuality;
-            set => cloudQuality = Math.Clamp(value, 0, 3);
-        }
         
         // Chunk save settings
         private bool enableChunkSaving = false;
@@ -151,3 +150,4 @@ namespace PerigonForge
         }
     }
 }
+

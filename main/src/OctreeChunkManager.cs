@@ -8,29 +8,43 @@ namespace PerigonForge
     /// </summary>
     public class OctreeChunkManager
     {
-        private OctreeNode root;
+        private OctreeNode? root;
         private int maxDepth;
         private int chunkSize;
+        
+        // Reusable buffer for visible chunks to avoid allocations
+        private readonly List<Chunk> _visibleBuffer = new(256);
+        
         public OctreeChunkManager(int maxDepth = 4, int chunkSize = 16)
         {
             this.maxDepth = maxDepth;
             this.chunkSize = chunkSize;
             root = new OctreeNode(new Vector3i(0, 0, 0), 0, chunkSize * (1 << maxDepth), maxDepth);
         }
+        
         public void InsertChunk(Chunk chunk)
         {
+            if (root == null) return;
             root.InsertChunk(chunk);
         }
+        
         public void RemoveChunk(Vector3i chunkPos)
         {
+            if (root == null) return;
             root.RemoveChunk(chunkPos);
         }
-        public List<Chunk> GetVisibleChunks(Vector4[] frustumPlanes, Vector3 cameraPos)
+        
+        /// <summary>
+        /// Get visible chunks using frustum culling and distance-based early termination.
+        /// </summary>
+        public List<Chunk> GetVisibleChunks(Vector4[] frustumPlanes, Vector3 cameraPos, float maxDistance = float.MaxValue)
         {
-            var visibleChunks = new List<Chunk>();
-            root.GetVisibleChunks(frustumPlanes, cameraPos, visibleChunks);
-            return visibleChunks;
+            if (root == null) return new List<Chunk>(0);
+            _visibleBuffer.Clear();
+            root.GetVisibleChunks(frustumPlanes, cameraPos, _visibleBuffer, maxDistance * maxDistance);
+            return _visibleBuffer;
         }
+        
         public void Clear()
         {
             root = new OctreeNode(new Vector3i(0, 0, 0), 0, chunkSize * (1 << maxDepth), maxDepth);
@@ -46,6 +60,7 @@ namespace PerigonForge
         private OctreeNode[]? children;
         private bool isSubdivided;
         private int nodeMaxDepth;
+        
         public OctreeNode(Vector3i position, int depth, int size, int nodeMaxDepth)
         {
             this.position = position;
@@ -57,6 +72,7 @@ namespace PerigonForge
             this.children = null;
             this.isSubdivided = false;
         }
+        
         public void InsertChunk(Chunk chunk)
         {
             Vector3i chunkPos = chunk.ChunkPos;
@@ -71,9 +87,10 @@ namespace PerigonForge
             {
                 Subdivide();
             }
-            if (children != null)
-                children[childIndex].InsertChunk(chunk);
+            if (children != null && children[childIndex] != null)
+                children[childIndex]!.InsertChunk(chunk);
         }
+        
         public void RemoveChunk(Vector3i chunkPos)
         {
             if (hasChunk && chunk != null && chunk.ChunkPos == chunkPos)
@@ -85,18 +102,28 @@ namespace PerigonForge
             if (isSubdivided && children != null)
             {
                 int childIndex = GetChildIndex(chunkPos);
-                children[childIndex].RemoveChunk(chunkPos);
+                if (children[childIndex] != null)
+                    children[childIndex]!.RemoveChunk(chunkPos);
             }
         }
-        public void GetVisibleChunks(Vector4[] frustumPlanes, Vector3 cameraPos, List<Chunk> visibleChunks)
+        
+        public void GetVisibleChunks(Vector4[] frustumPlanes, Vector3 cameraPos, List<Chunk> visibleChunks, float maxDistSquared = float.MaxValue)
         {
+            // Optimized: pre-compute center and use fast distance check
             Vector3 center = new Vector3(position.X, position.Y, position.Z);
             float radius = size * 0.866f;
+            
+            // Optimized: use squared distance comparison to avoid sqrt
+            Vector3 toCenter = center - cameraPos;
+            float distSquared = toCenter.X * toCenter.X + toCenter.Y * toCenter.Y + toCenter.Z * toCenter.Z;
+            if (distSquared > maxDistSquared + radius * radius * 4f)
+                return;
+            
+            // Optimized: inline frustum check with early exit
             bool inFrustum = true;
             for (int i = 0; i < 6 && inFrustum; i++)
             {
-                Vector3 normal = new Vector3(frustumPlanes[i].X, frustumPlanes[i].Y, frustumPlanes[i].Z);
-                float distance = Vector3.Dot(center, normal) + frustumPlanes[i].W;
+                float distance = frustumPlanes[i].X * center.X + frustumPlanes[i].Y * center.Y + frustumPlanes[i].Z * center.Z + frustumPlanes[i].W;
                 if (distance < -radius)
                     inFrustum = false;
             }
@@ -111,32 +138,31 @@ namespace PerigonForge
             {
                 for (int i = 0; i < 8; i++)
                 {
-                    children[i]?.GetVisibleChunks(frustumPlanes, cameraPos, visibleChunks);
+                    if (children[i] != null)
+                        children[i]!.GetVisibleChunks(frustumPlanes, cameraPos, visibleChunks, maxDistSquared);
                 }
             }
         }
+        
         private void Subdivide()
         {
             int halfSize = size / 2;
             int quarterSize = halfSize / 2;
-            Vector3i[] offsets = new Vector3i[]
-            {
-                new Vector3i(-quarterSize, -quarterSize, -quarterSize),
-                new Vector3i(quarterSize, -quarterSize, -quarterSize),
-                new Vector3i(-quarterSize, quarterSize, -quarterSize),
-                new Vector3i(quarterSize, quarterSize, -quarterSize),
-                new Vector3i(-quarterSize, -quarterSize, quarterSize),
-                new Vector3i(quarterSize, -quarterSize, quarterSize),
-                new Vector3i(-quarterSize, quarterSize, quarterSize),
-                new Vector3i(quarterSize, quarterSize, quarterSize)
-            };
+            int px = position.X, py = position.Y, pz = position.Z;
+            
+            // Optimized: pre-compute child positions
             children = new OctreeNode[8];
-            for (int i = 0; i < 8; i++)
-            {
-                children[i] = new OctreeNode(position + offsets[i], depth + 1, halfSize, nodeMaxDepth);
-            }
+            children[0] = new OctreeNode(new Vector3i(px - quarterSize, py - quarterSize, pz - quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[1] = new OctreeNode(new Vector3i(px + quarterSize, py - quarterSize, pz - quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[2] = new OctreeNode(new Vector3i(px - quarterSize, py + quarterSize, pz - quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[3] = new OctreeNode(new Vector3i(px + quarterSize, py + quarterSize, pz - quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[4] = new OctreeNode(new Vector3i(px - quarterSize, py - quarterSize, pz + quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[5] = new OctreeNode(new Vector3i(px + quarterSize, py - quarterSize, pz + quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[6] = new OctreeNode(new Vector3i(px - quarterSize, py + quarterSize, pz + quarterSize), depth + 1, halfSize, nodeMaxDepth);
+            children[7] = new OctreeNode(new Vector3i(px + quarterSize, py + quarterSize, pz + quarterSize), depth + 1, halfSize, nodeMaxDepth);
             isSubdivided = true;
         }
+        
         private int GetChildIndex(Vector3i chunkPos)
         {
             int index = 0;

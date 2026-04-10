@@ -1,0 +1,1 @@
+Atlas loaded: 128x128 from C:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\Blocks\Atlas.png

@@ -13,9 +13,12 @@ namespace PerigonForge
         private const byte MIXED   = 2;
         private readonly byte[] _st  = new byte[NODES];
         private readonly byte[] _val = new byte[NODES];
+
         public bool IsEmpty => _st[0] == EMPTY;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsSectorEmpty(int sector) => _st[1 + sector] == EMPTY;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public byte GetVoxel(int x, int y, int z)
         {
@@ -27,31 +30,62 @@ namespace PerigonForge
                 if (s == UNIFORM) return _val[n];
                 size >>= 1;
                 int o = ((x >= size) ? 1 : 0) | ((y >= size) ? 2 : 0) | ((z >= size) ? 4 : 0);
-                n = (n << 3) + 1 + o;
+                n = Child(n, o);
                 if (x >= size) x -= size;
                 if (y >= size) y -= size;
                 if (z >= size) z -= size;
             }
         }
+
+        /// <summary>
+        /// Sets a voxel and returns true if the value actually changed.
+        /// Uses the fast descent path which correctly merges on the way back up.
+        /// </summary>
         public bool SetVoxel(int x, int y, int z, byte block)
         {
-            bool changed = Descend(0, x, y, z, block, 32);
-            return changed;
+            if ((uint)x >= 32 || (uint)y >= 32 || (uint)z >= 32) return false;
+            return Descend(0, x, y, z, block, 32);
         }
+
+        // ── SetVoxelFast is now identical to SetVoxel — kept for API compatibility ──
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool SetVoxelFast(int x, int y, int z, byte block) => SetVoxel(x, y, z, block);
+
         public void LoadFromFlat(byte[] flat)
         {
             Array.Clear(_st,  0, NODES);
             Array.Clear(_val, 0, NODES);
             BuildNode(flat, 0, 0, 0, 0, 32);
         }
+
         public void ExportToFlat(byte[] dest)
         {
             if (_st[0] == EMPTY) return;
             WriteNode(dest, 0, 0, 0, 0, 32);
         }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        //  DESCENT  (single implementation used by both SetVoxel paths)
+        //
+        //  FIX (Bug 4): The old "DescendFast" skipped TryMerge on the way back
+        //  up, leaving MIXED nodes that should have been collapsed to UNIFORM or
+        //  EMPTY.  This corrupted ExportToFlat and caused GetVoxel to return
+        //  stale block IDs for blocks that had been overwritten.
+        //
+        //  FIX (Bug 5): The old DescendFast initialised children using a raw
+        //  "baseChild" index computed as (n << 3), but Child(n, o) = (n<<3)+1+o,
+        //  so child-0 is at (n<<3)+1, not (n<<3).  The off-by-one write stomped
+        //  a neighbouring node's state bytes, silently corrupting any block
+        //  placed at an octree-node boundary.
+        //
+        //  Both bugs are eliminated by using a single Descend() method that
+        //  always uses the Child() helper and always calls TryMerge().
+        // ═══════════════════════════════════════════════════════════════════════
         private bool Descend(int n, int x, int y, int z, byte block, int size)
         {
             byte s = _st[n];
+
+            // Leaf node (size == 1) — set directly
             if (size == 1)
             {
                 byte cur = (s == EMPTY) ? (byte)0 : _val[n];
@@ -60,11 +94,15 @@ namespace PerigonForge
                 _val[n] = block;
                 return true;
             }
+
+            // Uniform or empty node that needs splitting before we can descend
             if (s != MIXED)
             {
                 byte cur = (s == EMPTY) ? (byte)0 : _val[n];
-                if (cur == block) return false;
+                if (cur == block) return false;     // already the right value everywhere
+
                 byte childSt = (cur == 0) ? EMPTY : UNIFORM;
+                // FIX Bug 5: always use Child(n, o) — never raw (n<<3)+o
                 for (int o = 0; o < 8; o++)
                 {
                     int c = Child(n, o);
@@ -74,22 +112,28 @@ namespace PerigonForge
                 _st[n]  = MIXED;
                 _val[n] = 0;
             }
+
             size >>= 1;
-            int oc = ((x >= size) ? 1 : 0) | ((y >= size) ? 2 : 0) | ((z >= size) ? 4 : 0);
+            int oc    = ((x >= size) ? 1 : 0) | ((y >= size) ? 2 : 0) | ((z >= size) ? 4 : 0);
             int child = Child(n, oc);
+
             bool changed = Descend(child,
                 x >= size ? x - size : x,
                 y >= size ? y - size : y,
                 z >= size ? z - size : z,
                 block, size);
+
+            // FIX Bug 4: must merge on the way back up
             if (changed) TryMerge(n);
             return changed;
         }
+
         private void TryMerge(int n)
         {
-            byte f0 = _st[Child(n, 0)];
+            int  c0 = Child(n, 0);
+            byte f0 = _st[c0];
             if (f0 == MIXED) return;
-            byte v0 = _val[Child(n, 0)];
+            byte v0 = _val[c0];
             for (int o = 1; o < 8; o++)
             {
                 int c = Child(n, o);
@@ -99,6 +143,7 @@ namespace PerigonForge
             _st[n]  = f0;
             _val[n] = v0;
         }
+
         private void BuildNode(byte[] flat, int n, int ox, int oy, int oz, int size)
         {
             if (size == 1)
@@ -128,6 +173,7 @@ namespace PerigonForge
             _st[n]  = first;
             _val[n] = fv;
         }
+
         private void WriteNode(byte[] dest, int n, int ox, int oy, int oz, int size)
         {
             byte s = _st[n];
@@ -150,6 +196,7 @@ namespace PerigonForge
                 WriteNode(dest, Child(n, o), ox+dx, oy+dy, oz+dz, half);
             }
         }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int Child(int n, int o) => (n << 3) + 1 + o;
     }

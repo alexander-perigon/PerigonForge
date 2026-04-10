@@ -22,7 +22,37 @@ namespace PerigonForge
         private bool lightingUseMoon;
         private float moonPhase = 0.5f;
         public  float MoonPhase => moonPhase;
-        public void AdvanceDay() => moonPhase = (moonPhase + 1.0f / 30.0f) % 1.0f;
+        public  float MoonIllumination => CalculateMoonIllumination(moonPhase);
+        
+        private float CalculateMoonIllumination(float phase)
+        {
+            // Calculate illumination based on phase (0-1 cycle)
+            // Phase 0 = new moon, 0.5 = full moon, 1 = new moon
+            // Use cosine to create smooth curve from 0 to 1 to 0
+            float illumination = (1.0f - MathF.Cos(phase * MathHelper.TwoPi)) * 0.5f;
+            return illumination;
+        }
+        
+        public void AdvanceDay() 
+        {
+            moonPhase = (moonPhase + 1.0f / 30.0f) % 1.0f;
+            Console.WriteLine($"[Sky] Moon phase advanced to: {moonPhase:F2} (illumination: {MoonIllumination:F2})");
+        }
+        
+        /// <summary>
+        /// Get moon phase name for display
+        /// </summary>
+        public string GetMoonPhaseName()
+        {
+            float illumination = MoonIllumination;
+            if (illumination < 0.05f) return "New Moon";
+            if (illumination < 0.25f) return "Waxing Crescent";
+            if (illumination < 0.45f) return "First Quarter";
+            if (illumination < 0.55f) return "Waxing Gibbous";
+            if (illumination < 0.95f) return "Full Moon";
+            if (illumination >= 0.95f) return "Waning Gibbous";
+            return "Unknown";
+        }
         private readonly Vector4 nightColor   = new Vector4(0.02f, 0.02f, 0.08f, 1.0f);
         private readonly Vector4 sunriseColor = new Vector4(1.0f, 0.40f, 0.20f, 1.0f);
         private readonly Vector4 dayColor     = new Vector4(0.53f, 0.81f, 0.92f, 1.0f);
@@ -33,6 +63,7 @@ namespace PerigonForge
         private Vector3 moonDirection;
         private float   sunIntensity  = 1.0f;
         private float   moonIntensity = 0.0f;
+        private bool    moonIsVisible = false;
         public Vector3 SunPosition       => sunDirection * 1000.0f;
         public Vector4 SunDiskColor      { get; private set; }
         public float   SunDiskSize       { get; private set; }
@@ -44,12 +75,14 @@ namespace PerigonForge
         public Vector4 CurrentFogColor     { get; private set; }
         public Vector3 SunDirection        => sunDirection;
         public Vector3 MoonDirection       => moonDirection;
+        public bool    MoonIsVisible        => moonIsVisible;
         public float   SunIntensity        => sunIntensity;
-        public float   MoonIntensity       => moonIntensity;
+        public float   MoonIntensity       => moonIsVisible ? moonIntensity : 0f;
         public float   AmbientIntensity    { get; private set; }
         public float   TimeOfDay           => timeOfDay;
         public float   CloudTime           { get; private set; }
         public float   CloudDensity        => 0.5f;
+        public float   CloudAltitude        => 120.0f;
         public Vector3 LightingSunDirection   => lightingSunDirection;
         public Vector3 LightingMoonDirection  => lightingMoonDirection;
         public float   LightingSunIntensity  => lightingSunIntensity;
@@ -57,6 +90,8 @@ namespace PerigonForge
         public float   LightingAmbientIntensity => lightingAmbientIntensity;
         public Vector4 LightingLightColor    => lightingLightColor;
         public bool    LightingUseMoon      => lightingUseMoon;
+        public bool    LightingMoonIsVisible => lightingMoonIsVisible;
+        private bool lightingMoonIsVisible;
         public SkySystem()
         {
             lightingUpdateInterval = dayLengthSeconds / LIGHTING_UPDATES_PER_DAY;
@@ -84,9 +119,8 @@ namespace PerigonForge
             ).Normalized();
 
             // Moon orbits at a fixed phase offset from sun (so it's always visible at some point)
-            // Phase offset of ~0.5 means moon is opposite the sun, but with slight tilt
-            // This ensures both sun and moon can appear in the sky
-            float moonPhaseOffset = 0.4f; // Moon rises ~4 hours after sun
+            // With offset 0.5, moon is opposite sun - at midnight (0.5), moon is at highest point
+            float moonPhaseOffset = 0.5f; // Moon is opposite the sun, visible at night
             float moonAngle = (timeOfDay + moonPhaseOffset) * MathHelper.TwoPi - MathHelper.PiOver2;
             moonDirection = new Vector3(
                 MathF.Cos(moonAngle),
@@ -125,7 +159,17 @@ namespace PerigonForge
             lightingMoonDirection = snapshotMoonDir;
             lightingSunIntensity = Math.Clamp(sunH * 2.0f, 0.0f, 1.0f);
             lightingMoonIntensity = Math.Clamp(-sunH * 2.0f, 0.0f, 1.0f);
-            lightingUseMoon = lightingMoonIntensity > lightingSunIntensity;
+            
+            // Only use moonlight if moon is actually visible in the sky (above horizon)
+            bool moonIsAboveHorizon = snapshotMoonDir.Y > 0.0f;
+            lightingMoonIsVisible = moonIsAboveHorizon;
+            if (!moonIsAboveHorizon) lightingMoonIntensity = 0.0f;
+            
+            lightingUseMoon = lightingMoonIntensity > lightingSunIntensity && moonIsAboveHorizon;
+            
+            // Scale moonlight by moon phase illumination - declare at function start
+            float phaseFactor = MoonIllumination;
+            
             if (snapshotTimeOfDay >= 0.20f && snapshotTimeOfDay <= 0.80f)
                 lightingAmbientIntensity = 0.40f + lightingSunIntensity * 0.30f;
             else if (snapshotTimeOfDay > 0.15f && snapshotTimeOfDay < 0.30f)
@@ -133,7 +177,8 @@ namespace PerigonForge
             else if (snapshotTimeOfDay > 0.70f && snapshotTimeOfDay < 0.85f)
                 lightingAmbientIntensity = 0.15f + ((0.85f - snapshotTimeOfDay) / 0.15f) * 0.25f;
             else
-                lightingAmbientIntensity = 0.10f + lightingMoonIntensity * 0.10f;
+                // Nighttime - scale ambient by moon phase
+                lightingAmbientIntensity = 0.10f + lightingMoonIntensity * phaseFactor * 0.20f;
             if (!lightingUseMoon)
             {
                 if (snapshotTimeOfDay < 0.30f)
@@ -155,22 +200,33 @@ namespace PerigonForge
             }
             else
             {
-                lightingLightColor = new Vector4(0.30f, 0.35f, 0.50f, 1.0f) * (0.3f + lightingMoonIntensity * 0.4f);
+                // Moonlit night - scale by phase for realistic lighting
+                // Full moon = brighter blue moonlight, new moon = very dark
+                float moonBrightness = 0.3f + phaseFactor * 0.5f;
+                lightingLightColor = new Vector4(0.30f, 0.35f, 0.50f, 1.0f) * moonBrightness;
             }
         }
         private void CalculateTimeBasedValues()
         {
             float sunH = sunDirection.Y;
             sunIntensity  = Math.Clamp( sunH * 2.0f, 0.0f, 1.0f);
-            moonIntensity = Math.Clamp(-sunH * 2.0f, 0.0f, 1.0f);
-            if (timeOfDay >= 0.20f && timeOfDay <= 0.80f)
-                AmbientIntensity = 0.40f + sunIntensity * 0.30f;
-            else if (timeOfDay > 0.15f && timeOfDay < 0.30f)
-                AmbientIntensity = 0.15f + ((timeOfDay - 0.15f) / 0.15f) * 0.25f;
-            else if (timeOfDay > 0.70f && timeOfDay < 0.85f)
-                AmbientIntensity = 0.15f + ((0.85f - timeOfDay) / 0.15f) * 0.25f;
-            else
-                AmbientIntensity = 0.10f + moonIntensity * 0.10f;
+            // Moon intensity based on moon direction Y (when moon is above horizon at night)
+            // When moon is below horizon (negative Y), moon should not be visible
+            float moonH = moonDirection.Y;
+            moonIntensity = Math.Clamp(moonH * 2.0f, 0.0f, 1.0f);
+            // Moon is visible only when it's above the horizon (positive Y component)
+            moonIsVisible = moonH > 0.0f && moonIntensity > 0.0f;
+            
+            // Smooth ambient transition based on sun elevation instead of hard time thresholds
+            // Use smoothstep for gradual transition around sunrise/sunset
+            float dayAmount = Math.Clamp((sunH + 0.1f) / 0.4f, 0.0f, 1.0f);  // Normalize sun height
+            dayAmount = dayAmount * dayAmount * (3f - 2f * dayAmount);  // Smoothstep
+            
+            // Day ambient: bright, Night ambient: dark + moon phase
+            float nightAmbient = 0.06f + moonIntensity * MoonIllumination * 0.12f;
+            float dayAmbient = 0.60f;
+            AmbientIntensity = Math.Clamp(nightAmbient + (dayAmbient - nightAmbient) * dayAmount, 0.08f, 0.70f);
+            
             CalculateSunProperties();
             CurrentSkyColor     = InterpolateSkyColor();
             CurrentHorizonColor = InterpolateHorizonColor();
@@ -238,7 +294,8 @@ namespace PerigonForge
         }
         public Vector3 GetLightDirection()
         {
-            if (lightingUseMoon)
+            // Only use moonlight direction if moon is actually visible (above horizon)
+            if (lightingUseMoon && lightingMoonIsVisible)
                 return -lightingMoonDirection;
             return -lightingSunDirection;
         }

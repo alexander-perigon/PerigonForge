@@ -5,9 +5,10 @@ using OpenTK.Mathematics;
 namespace PerigonForge
 {
     /// <summary>
-    /// Renders 3D textured block previews for the inventory.
+    /// Renders 3D textured block previews for the inventory and hotbar.
     /// Uses the same texture atlas as ChunkRenderer for consistency.
-    /// Each block preview uses the original block's vertex data and texture atlas coordinates.
+    /// Supports both simple cube blocks and custom 3D model blocks (chairs, stairs, slabs, ladders).
+    /// Each block preview rotates slowly for a 3D effect.
     /// </summary>
     public class BlockPreviewRenderer : IDisposable
     {
@@ -17,6 +18,18 @@ namespace PerigonForge
         private int ebo;
         private int textureId;
         private static int sharedTextureId = 0;
+        
+        // For model rendering
+        private int modelVao;
+        private int modelVbo;
+        private int modelEbo;
+        private float[] modelVertexData = Array.Empty<float>();
+        private uint[] modelIndices = Array.Empty<uint>();
+        
+        // Cache for model buffers
+        private string? cachedModelName = null;
+        private int cachedVertexCount = 0;
+        private int cachedIndexCount = 0;
         
         // Cube vertices with position (3), normal (3), UV (2)
         // Format: x, y, z, nx, ny, nz, u, v
@@ -74,6 +87,7 @@ namespace PerigonForge
             
             shader = InitializeShader();
             InitializeBuffers();
+            InitializeModelBuffers();
             textureId = LoadTexture();
         }
         
@@ -168,6 +182,39 @@ void main() {
             
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
             GL.BufferData(BufferTarget.ElementArrayBuffer, cubeIndices.Length * sizeof(uint), cubeIndices, BufferUsageHint.StaticDraw);
+            
+            // Position
+            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 0);
+            GL.EnableVertexAttribArray(0);
+            
+            // Normal
+            GL.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 3 * sizeof(float));
+            GL.EnableVertexAttribArray(1);
+            
+            // UV
+            GL.VertexAttribPointer(2, 2, VertexAttribPointerType.Float, false, 8 * sizeof(float), 6 * sizeof(float));
+            GL.EnableVertexAttribArray(2);
+            
+            GL.BindVertexArray(0);
+        }
+        
+        private void InitializeModelBuffers()
+        {
+            modelVao = GL.GenVertexArray();
+            modelVbo = GL.GenBuffer();
+            modelEbo = GL.GenBuffer();
+            
+            // Initialize with empty buffers - will be updated when rendering models
+            modelVertexData = Array.Empty<float>();
+            modelIndices = Array.Empty<uint>();
+            
+            GL.BindVertexArray(modelVao);
+            
+            GL.BindBuffer(BufferTarget.ArrayBuffer, modelVbo);
+            GL.BufferData(BufferTarget.ArrayBuffer, 1, IntPtr.Zero, BufferUsageHint.DynamicDraw);
+            
+            GL.BindBuffer(BufferTarget.ElementArrayBuffer, modelEbo);
+            GL.BufferData(BufferTarget.ElementArrayBuffer, 1, IntPtr.Zero, BufferUsageHint.DynamicDraw);
             
             // Position
             GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 8 * sizeof(float), 0);
@@ -288,10 +335,129 @@ void main() {
         }
         
         /// <summary>
+        /// Build model vertex data with atlas UVs for 3D model blocks.
+        /// Loads the OBJ model and transforms UVs to use the texture atlas.
+        /// </summary>
+        private bool BuildModelVertexData(BlockType blockType, out float[] vertices, out uint[] indices, out int vertexCount, out int indexCount)
+        {
+            vertices = Array.Empty<float>();
+            indices = Array.Empty<uint>();
+            vertexCount = 0;
+            indexCount = 0;
+            
+            var def = BlockRegistry.Get(blockType);
+            if (!def.UseModel || string.IsNullOrEmpty(def.ModelURL))
+                return false;
+            
+            var modelData = ModelLoader.LoadModel(def.ModelURL);
+            if (modelData.VertexCount == 0)
+                return false;
+            
+            // Get the block's texture atlas tile for the side
+            Vector2i tileLoc = def.SideAtlasTile;
+            Vector2[] atlasUVs = TextureAtlas.GetTileUVs(tileLoc.X, tileLoc.Y);
+            Vector3 blockNormal = new Vector3(0, 0, 1);
+            
+            // Convert model data to our format
+            vertices = new float[modelData.VertexCount * 8];
+            indices = modelData.Indices;
+            
+            for (int i = 0; i < modelData.VertexCount; i++)
+            {
+                int srcIdx = i * 5;
+                int dstIdx = i * 8;
+                
+                // Position (from model)
+                vertices[dstIdx] = modelData.Vertices[srcIdx];
+                vertices[dstIdx + 1] = modelData.Vertices[srcIdx + 1];
+                vertices[dstIdx + 2] = modelData.Vertices[srcIdx + 2];
+                
+                // Normal (from model or block default)
+                if (modelData.Normals != null && i < modelData.Normals.Length)
+                {
+                    vertices[dstIdx + 3] = modelData.Normals[i].X;
+                    vertices[dstIdx + 4] = modelData.Normals[i].Y;
+                    vertices[dstIdx + 5] = modelData.Normals[i].Z;
+                }
+                else
+                {
+                    vertices[dstIdx + 3] = blockNormal.X;
+                    vertices[dstIdx + 4] = blockNormal.Y;
+                    vertices[dstIdx + 5] = blockNormal.Z;
+                }
+                
+                // UV transformed to atlas coordinates
+                float modelU = modelData.Vertices[srcIdx + 3];
+                float modelV = modelData.Vertices[srcIdx + 4];
+                
+                // Transform from model's [0,1] UV space to atlas tile coordinates
+                // Use bilinear interpolation of the atlas UV corners
+                float atlasU = atlasUVs[0].X + (atlasUVs[1].X - atlasUVs[0].X) * modelU;
+                float atlasV = atlasUVs[0].Y + (atlasUVs[3].Y - atlasUVs[0].Y) * modelV;
+                
+                vertices[dstIdx + 6] = atlasU;
+                vertices[dstIdx + 7] = atlasV;
+            }
+            
+            vertexCount = modelData.VertexCount;
+            indexCount = modelData.IndexCount;
+            return true;
+        }
+        
+        /// <summary>
+        /// Update the model buffers with the given vertex and index data.
+        /// Only updates if the model has changed or buffers are not initialized.
+        /// </summary>
+        private void UpdateModelBuffers(string modelName, float[] vertices, uint[] indices)
+        {
+            bool needsUpdate = cachedModelName != modelName || 
+                               cachedVertexCount != vertices.Length / 8 ||
+                               cachedIndexCount != indices.Length;
+            
+            if (needsUpdate && vertices.Length > 0)
+            {
+                cachedModelName = modelName;
+                cachedVertexCount = vertices.Length / 8;
+                cachedIndexCount = indices.Length;
+                
+                GL.BindBuffer(BufferTarget.ArrayBuffer, modelVbo);
+                GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(float), vertices, BufferUsageHint.DynamicDraw);
+                
+                GL.BindBuffer(BufferTarget.ElementArrayBuffer, modelEbo);
+                GL.BufferData(BufferTarget.ElementArrayBuffer, indices.Length * sizeof(uint), indices, BufferUsageHint.DynamicDraw);
+            }
+        }
+        
+        /// <summary>
         /// Render a 3D block preview at the specified screen position.
         /// The preview is centered within the slot boundaries.
+        /// Uses rotation animation for a 3D effect.
+        /// Supports both simple cube blocks and custom 3D model blocks.
         /// </summary>
         public void RenderBlock(BlockType blockType, int screenX, int screenY, int size, int screenWidth, int screenHeight, double time)
+        {
+            var def = BlockRegistry.Get(blockType);
+            
+            // Determine if this is a model block
+            bool isModelBlock = def.UseModel && !string.IsNullOrEmpty(def.ModelURL);
+            
+            if (isModelBlock)
+            {
+                // Render as 3D model
+                RenderModelBlock(blockType, def.ModelURL, screenX, screenY, size, screenWidth, screenHeight, time);
+            }
+            else
+            {
+                // Render as simple cube
+                RenderCubeBlock(blockType, screenX, screenY, size, screenWidth, screenHeight, time);
+            }
+        }
+        
+        /// <summary>
+        /// Render a simple cube block with atlas textures.
+        /// Uses animation for a 3D rotating effect in the inventory.
+        /// </summary>
+        private void RenderCubeBlock(BlockType blockType, int screenX, int screenY, int size, int screenWidth, int screenHeight, double time)
         {
             var def = BlockRegistry.Get(blockType);
             bool useTexture = !def.UsesFlatColor && sharedTextureId != 0;
@@ -305,7 +471,6 @@ void main() {
             GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, vertexData.Length * sizeof(float), vertexData);
             GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
             
-            // screenX and screenY are already the CENTER of the slot (as passed from Game.cs)
             // Use a slightly smaller scale to fit nicely within the slot
             float scale = size * 0.65f;
             
@@ -331,6 +496,74 @@ void main() {
             float viewY = screenHeight / 2f - screenY;
             Matrix4 view = Matrix4.CreateTranslation(viewX, viewY, 0);
             
+            SetupShaderAndDraw(model, view, projection, blockColor, useTexture);
+            
+            // Draw the cube
+            GL.BindVertexArray(vao);
+            GL.DrawElements(PrimitiveType.Triangles, cubeIndices.Length, DrawElementsType.UnsignedInt, 0);
+            GL.BindVertexArray(0);
+            
+            GL.Enable(EnableCap.DepthTest);
+        }
+        
+        /// <summary>
+        /// Render a 3D model block with atlas textures.
+        /// Uses animation for a 3D rotating effect in the inventory.
+        /// </summary>
+        private void RenderModelBlock(BlockType blockType, string modelName, int screenX, int screenY, int size, int screenWidth, int screenHeight, double time)
+        {
+            var def = BlockRegistry.Get(blockType);
+            bool useTexture = !def.UsesFlatColor && sharedTextureId != 0;
+            Vector3 blockColor = GetBlockColor(blockType);
+            
+            // Build model vertex data with atlas UVs
+            if (!BuildModelVertexData(blockType, out float[] vertices, out uint[] indices, out int vertexCount, out int indexCount))
+            {
+                // Fallback to cube rendering
+                RenderCubeBlock(blockType, screenX, screenY, size, screenWidth, screenHeight, time);
+                return;
+            }
+            
+            // Update model buffers
+            UpdateModelBuffers(modelName, vertices, indices);
+            
+            // Use a slightly smaller scale to fit nicely within the slot
+            float scale = size * 0.28f; // Models are smaller than cubes
+            
+            // Create rotation animation for 3D effect
+            float rotation = (float)(time * 0.5);
+            float tilt = 0.25f;
+            
+            // Model matrix: scale and rotate around center
+            Matrix4 model = Matrix4.CreateScale(scale) *
+                            Matrix4.CreateRotationY(rotation) * 
+                            Matrix4.CreateRotationX(tilt);
+            
+            // Orthographic projection mapping screen pixels directly
+            float orthoWidth = screenWidth;
+            float orthoHeight = screenHeight;
+            Matrix4 projection = Matrix4.CreateOrthographic(orthoWidth, orthoHeight, -100f, 100f);
+            
+            // View matrix: position the block at the slot center
+            float viewX = screenX - screenWidth / 2f;
+            float viewY = screenHeight / 2f - screenY;
+            Matrix4 view = Matrix4.CreateTranslation(viewX, viewY, 0);
+            
+            SetupShaderAndDraw(model, view, projection, blockColor, useTexture);
+            
+            // Draw the model
+            GL.BindVertexArray(modelVao);
+            GL.DrawElements(PrimitiveType.Triangles, indexCount, DrawElementsType.UnsignedInt, 0);
+            GL.BindVertexArray(0);
+            
+            GL.Enable(EnableCap.DepthTest);
+        }
+        
+        /// <summary>
+        /// Setup shader uniforms and draw state for block rendering.
+        /// </summary>
+        private void SetupShaderAndDraw(Matrix4 model, Matrix4 view, Matrix4 projection, Vector3 blockColor, bool useTexture)
+        {
             shader.Use();
             shader.SetMatrix4("model", model);
             shader.SetMatrix4("view", view);
@@ -349,12 +582,6 @@ void main() {
             GL.Enable(EnableCap.CullFace);
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            
-            GL.BindVertexArray(vao);
-            GL.DrawElements(PrimitiveType.Triangles, cubeIndices.Length, DrawElementsType.UnsignedInt, 0);
-            GL.BindVertexArray(0);
-            
-            GL.Enable(EnableCap.DepthTest);
         }
         
         public void Dispose()
@@ -363,6 +590,9 @@ void main() {
             GL.DeleteVertexArray(vao);
             GL.DeleteBuffer(vbo);
             GL.DeleteBuffer(ebo);
+            GL.DeleteVertexArray(modelVao);
+            GL.DeleteBuffer(modelVbo);
+            GL.DeleteBuffer(modelEbo);
             if (textureId != 0 && textureId != sharedTextureId)
             {
                 GL.DeleteTexture(textureId);

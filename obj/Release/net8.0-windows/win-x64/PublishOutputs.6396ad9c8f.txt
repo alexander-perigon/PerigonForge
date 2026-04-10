@@ -1,0 +1,12 @@
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\PerigonForge.pdb
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\audio\grassyMountains.mp3
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\audio\Q.wav
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\Blocks\Atlas.png
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\Blocks\models\chair.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\Blocks\models\ladder.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\Blocks\models\slab.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\Blocks\models\stairs.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\menu\Background.png
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\Resources\menu\PerigonForge.png
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\glfw3.dll
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\Perigonforge-installer\publish\PerigonForge.exe

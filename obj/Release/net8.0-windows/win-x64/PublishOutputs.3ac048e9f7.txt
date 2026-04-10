@@ -1,4 +1,0 @@
-C:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\publish\PerigonForge.pdb
-C:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\publish\Resources\audio\grassyMountains.mp3
-C:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\publish\Resources\Blocks\Atlas.png
-C:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\publish\PerigonForge.exe

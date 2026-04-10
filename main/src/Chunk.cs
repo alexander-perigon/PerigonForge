@@ -6,15 +6,8 @@ using System.Text.Json;
 
 namespace PerigonForge
 {
-    public enum BlockType : byte { Air = 0, Grass = 1, Dirt = 2, Stone = 3, Water = 4, MapleLog = 5, MapleLeaves = 6 }
+    public enum BlockType : byte { Air = 0, Grass = 1, Dirt = 2, Stone = 3, Water = 4, MapleLog = 5, MapleLeaves = 6, Smooth_Stone = 7, MapleStairs = 8, MapleChair = 9, MapleLadder = 10, MapleSlab = 11, StoneStairs = 12, StoneChair = 13, StoneLadder = 14, StoneSlab = 15, SmoothStoneStairs = 16, SmoothStoneChair = 17, SmoothStoneLadder = 18, SmoothStoneSlab = 19, Maple_Planks = 20, PortalBlock = 21 }
     public enum ChunkRenderMode { Full3D }
-
-    /// <summary>
-    /// A 32x32x32 region of the world.
-    /// Stores voxel data in a ChunkOctree for memory efficiency.
-    /// Maintains separate opaque and transparent GPU buffers.
-    /// LOD removed — the engine always renders Full3D within render distance.
-    /// </summary>
     public sealed class Chunk : IDisposable
     {
         public const int CHUNK_SIZE   = 32;
@@ -36,9 +29,8 @@ namespace PerigonForge
 
         // ── Chunk Save/Load ─────────────────────────────────────────────────────
         private byte[]? _originalVoxels = null;
-        private byte[]? _modifiedVoxels = null;
-        private bool _hasModifications = false;
-        private bool _originalLoaded = false;
+        private bool    _hasModifications = false;
+        private bool    _originalLoaded   = false;
 
         /// <summary>True if this chunk has modifications from the original generated state.</summary>
         public bool HasModifications => _hasModifications;
@@ -63,8 +55,8 @@ namespace PerigonForge
         public int EBOTransparent { get; set; }
 
         // Rented pool buffers for transparent mesh (consumed during upload)
-        public float[]? RentedVertsTransparent { get; set; }
-        public uint[]?  RentedIdxTransparent   { get; set; }
+        public float[]? RentedVertsTransparent  { get; set; }
+        public uint[]?  RentedIdxTransparent    { get; set; }
         public int      RentedVCountTransparent { get; set; }
         public int      RentedICountTransparent { get; set; }
 
@@ -121,7 +113,7 @@ namespace PerigonForge
                 IsDirty              = true;
                 TransparentMeshDirty = true;
                 IsBlockUpdate        = true;
-                MarkModified();
+                if (_originalLoaded) _hasModifications = true;
             }
         }
 
@@ -135,7 +127,7 @@ namespace PerigonForge
                 IsDirty              = true;
                 TransparentMeshDirty = true;
                 IsBlockUpdate        = true;
-                MarkModified();
+                if (_originalLoaded) _hasModifications = true;
             }
         }
 
@@ -151,10 +143,7 @@ namespace PerigonForge
         /// <summary>
         /// Marks the flat cache as dirty, forcing a re-export on the next GetFlatForMeshing() call.
         /// </summary>
-        public void MarkCacheDirty()
-        {
-            _cacheDirty = true;
-        }
+        public void MarkCacheDirty() => _cacheDirty = true;
 
         /// <summary>
         /// Returns the flat voxel array for mesh building.
@@ -180,7 +169,7 @@ namespace PerigonForge
             if (_originalLoaded) return;
             _originalVoxels = new byte[CHUNK_VOLUME];
             _octree.ExportToFlat(_originalVoxels);
-            _originalLoaded = true;
+            _originalLoaded   = true;
             _hasModifications = false;
         }
 
@@ -189,30 +178,15 @@ namespace PerigonForge
             if (data == null || data.Length != CHUNK_VOLUME) return;
             _originalVoxels = new byte[CHUNK_VOLUME];
             Array.Copy(data, _originalVoxels, CHUNK_VOLUME);
-            _originalLoaded = true;
+            _originalLoaded   = true;
             _hasModifications = false;
         }
 
-        public byte[]? SaveModifiedVoxels()
-        {
-            if (!_hasModifications || _modifiedVoxels == null) return null;
-            return _modifiedVoxels;
-        }
-
-        public bool HasUnsavedChanges()
-        {
-            if (!_hasModifications || _modifiedVoxels == null) return false;
-            if (_cacheDirty)
-            {
-                Array.Clear(_flatCache, 0, CHUNK_VOLUME);
-                _octree.ExportToFlat(_flatCache);
-                _cacheDirty = false;
-            }
-            for (int i = 0; i < CHUNK_VOLUME; i++)
-                if (_flatCache[i] != _modifiedVoxels[i]) return true;
-            return false;
-        }
-
+        /// <summary>
+        /// Returns the live flat-cache array directly — NO copy.
+        /// Callers (World save/unload) must use the data immediately and not retain a
+        /// reference, because the array is owned by this Chunk and will be reused.
+        /// </summary>
         public byte[] GetCurrentVoxels()
         {
             if (_cacheDirty)
@@ -221,9 +195,7 @@ namespace PerigonForge
                 _octree.ExportToFlat(_flatCache);
                 _cacheDirty = false;
             }
-            byte[] result = new byte[CHUNK_VOLUME];
-            Array.Copy(_flatCache, result, CHUNK_VOLUME);
-            return result;
+            return _flatCache;
         }
 
         public byte[]? GetOriginalVoxels()
@@ -238,22 +210,27 @@ namespace PerigonForge
         {
             if (!_originalLoaded || _originalVoxels == null) return;
             _octree.LoadFromFlat(_originalVoxels);
-            _cacheDirty = true;
-            IsDirty = true;
+            _cacheDirty          = true;
+            IsDirty              = true;
             TransparentMeshDirty = true;
-            _hasModifications = false;
-            _modifiedVoxels = null;
+            _hasModifications    = false;
         }
 
+        /// <summary>
+        /// Called by World.OnVoxelChanged only — marks this chunk as player-modified.
+        /// </summary>
         public void MarkModified()
         {
-            if (!_originalLoaded || _hasModifications) return;
-            _modifiedVoxels = new byte[CHUNK_VOLUME];
-            _octree.ExportToFlat(_modifiedVoxels);
-            _hasModifications = true;
+            if (_originalLoaded) _hasModifications = true;
         }
 
         public string GetChunkKey() => $"{ChunkPos.X},{ChunkPos.Y},{ChunkPos.Z}";
+
+        // ── Legacy shims ───────────────────────────────────────────────────────
+
+        public byte[]? SaveModifiedVoxels() => _hasModifications ? GetCurrentVoxels() : null;
+
+        public bool HasUnsavedChanges() => _hasModifications;
 
         // ── Queries ────────────────────────────────────────────────────────────
 
@@ -294,7 +271,6 @@ namespace PerigonForge
             }
 
             _originalVoxels = null;
-            _modifiedVoxels = null;
 
             GC.SuppressFinalize(this);
         }

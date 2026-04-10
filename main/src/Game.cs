@@ -8,6 +8,23 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 
 namespace PerigonForge
 {
+    /// <summary>
+    /// Represents block rotation with both vertical (X-axis) and horizontal (Y-axis) components
+    /// </summary>
+    public struct BlockRotation
+    {
+        public int RotationX { get; set; }  // Vertical: 0°, 90°, 180°, 270°
+        public int RotationY { get; set; }  // Horizontal: 0°, 90°, 180°, 270°
+
+        public BlockRotation(int rotationX = 0, int rotationY = 0)
+        {
+            RotationX = rotationX;
+            RotationY = rotationY;
+        }
+
+        public override string ToString() => $"(X:{RotationX}°, Y:{RotationY}°)";
+    }
+
     public class Game : GameWindow
     {
         private World                world                = null!;
@@ -26,13 +43,15 @@ namespace PerigonForge
         private InventoryUI          inventoryUI          = null!;
         private WeatherSystem        weatherSystem        = null!;
         private BlockParticleSystem  blockParticles       = null!;
-        private SoundManager         soundManager         = null!;
-
-        // ── Edge-trigger flags (one bool per action, reset each frame) ─────────────
-        // Each flag is TRUE while the key/button is held; we fire actions on the
-        // transition from false→true (rising edge), not every frame.
+        private BlockOverlaySystem  blockOverlaySystem  = null!;
+        private MainMenuSystem   mainMenuSystem   = null!;
+        private string?          _selectedWorldPath;  // Path to selected world folder for loading
+        private int             _selectedWorldSeed = 12345;  // Seed for selected world
+        private bool            _needsWorldReinit = false;  // Flag to reinit world after menu
+        private bool isInMainMenu = true;
         private bool _escWasDown;
         private bool _f11WasDown;
+        private bool _fWasDown;    // For F key toggle
         private bool _f8WasDown;
         private bool _f9WasDown;
         private bool _eWasDown;
@@ -42,8 +61,18 @@ namespace PerigonForge
         private bool _rmbWasDown;      // shared across gameplay + inventory
         private bool _settingsLmbWasDown;  // separate tracker for settings panel
 
+        // In-game settings: EXIT & SAVE button
+        private bool _exitSaveHovered = false;
+        private int _exitSaveBtnX = 0, _exitSaveBtnY = 0, _exitSaveBtnW = 200, _exitSaveBtnH = 44;
+
         private bool wireframeMode = false;
         private bool isDebugMode   = false;
+        private bool isCreative   = true; // Default to creative mode - no inventory consumption
+        private bool canFly       = false; // Flying is disabled by default even in creative mode
+
+        // ── World & Inventory Save Timer ───────────────────────────────────────────────
+        private const long INVENTORY_SAVE_INTERVAL_MS = 30_000; // Save every 30 seconds
+        private long _lastInventorySaveTick = 0;
         private int  settingsTab   = 0;   // 0 = Graphics, 1 = Controls
 
         private bool    firstMove    = true;
@@ -82,7 +111,10 @@ namespace PerigonForge
 
         // ── Constructor ────────────────────────────────────────────────────────────
         public Game(int width, int height, string title)
-            : base(GameWindowSettings.Default, new NativeWindowSettings
+            : base(new GameWindowSettings
+            {
+                UpdateFrequency = 300  // Increased from default 60Hz to allow 300 FPS
+            }, new NativeWindowSettings
             {
                 Size         = new Vector2i(width, height),
                 Title        = title,
@@ -93,25 +125,90 @@ namespace PerigonForge
                 Profile      = ContextProfile.Core,
                 APIVersion   = new Version(3, 3)
             })
-        { }
+        {
+            VSync = VSyncMode.Off;  // Disable VSync for maximum FPS
+        }
 
         // ── Lifecycle ──────────────────────────────────────────────────────────────
 
         protected override void OnLoad()
         {
-            base.OnLoad();
-            IsVisible = true;
+            // FIX 3: Wrap entire OnLoad in try/catch so missing shaders/textures/audio
+            // print the real exception instead of silently closing the window.
+            try
+            {
+                base.OnLoad();
+                IsVisible = true;
 
-            GL.Enable(EnableCap.DepthTest);
-            GL.Enable(EnableCap.CullFace);
-            GL.CullFace(CullFaceMode.Back);
-            GL.FrontFace(FrontFaceDirection.Ccw);
-            GL.ClearColor(0.5f, 0.7f, 1.0f, 1.0f);
-            GL.Enable(EnableCap.Multisample);
-            Console.WriteLine("[OnLoad] GL settings initialized");
+                GL.Enable(EnableCap.DepthTest);
+                GL.Enable(EnableCap.CullFace);
+                GL.CullFace(CullFaceMode.Back);
+                GL.FrontFace(FrontFaceDirection.Ccw);
+                GL.ClearColor(0.5f, 0.7f, 1.0f, 1.0f);
+                GL.Enable(EnableCap.Multisample);
+                Console.WriteLine("[OnLoad] GL settings initialized");
 
-            world    = new World();
+                // Initialize objects that don't depend on world
+                chunkRenderer        = new ChunkRenderer();
+                selectionRenderer    = new SelectionRenderer();
+                crosshairRenderer    = new CrosshairRenderer();
+                uiRenderer           = new UIRenderer();
+                fontRenderer         = new FontRenderer();
+                inventorySystem      = new InventorySystem();
+                hotbarSystem         = new HotbarSystem(inventorySystem);
+                blockPreviewRenderer = new BlockPreviewRenderer();
+                inventoryUI          = new InventoryUI(inventorySystem, hotbarSystem, uiRenderer, fontRenderer, blockPreviewRenderer);
+                inventoryUI.UpdateScreenSize(Size.X, Size.Y);
+
+                BlockPreviewRenderer.SetSharedTexture(chunkRenderer.TextureId);
+
+                skySystem = new SkySystem();
+                skySystem.SetDayLength(600f);
+                skyRenderer = new SkyRenderer();
+                Console.WriteLine("[OnLoad] Sky initialized");
+
+                weatherSystem = new WeatherSystem();
+                weatherSystem.SetWeather(WeatherType.Clear);
+                weatherSystem.SetQuality(WeatherQuality.Low);
+
+                blockParticles = new BlockParticleSystem(50);
+                blockParticles.SetTexture(chunkRenderer.TextureId);
+                Console.WriteLine("[OnLoad] Effects initialized");
+
+                blockOverlaySystem = new BlockOverlaySystem();
+                Console.WriteLine("[OnLoad] Block overlay system initialized");
+
+                // Initialize main menu system
+                mainMenuSystem = new MainMenuSystem();
+                mainMenuSystem.SetParentGame(this);
+                mainMenuSystem.Initialize(uiRenderer, fontRenderer);
+                mainMenuSystem.UpdateScreenSize(Size.X, Size.Y);
+                Console.WriteLine("[OnLoad] Main menu system initialized");
+
+                CursorState = CursorState.Normal;
+                Console.WriteLine("[OnLoad] Complete!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[FATAL OnLoad] {ex}");
+                Console.WriteLine("Press Enter to exit...");
+                Console.ReadLine();
+                throw;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        //  WORLD INITIALIZATION (called from OnLoad and after menu returns)
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        private void InitializeWorldObjects()
+        {
+            // Initialize world with selected seed and path
+            world    = new World(_selectedWorldSeed, _selectedWorldPath);
             settings = new Settings();
+            settings.RenderDistance = 3;
+            settings.FullDetailDistance = 2;
+            settings.VerticalRenderDistance = 1;
             settings.ApplyToWorld(world);
             Console.WriteLine("[OnLoad] World + Settings initialized");
 
@@ -119,57 +216,66 @@ namespace PerigonForge
             float spawnH   = Math.Max(terrainY + 2f, TerrainGenerator.SEA_LEVEL + 2f);
             camera = new Camera(new Vector3(0, spawnH, 0));
             camera.Speed = 6f;
+            camera.IsFlying = canFly;
             camera.SetWorld(world);
-            camera.SetSoundManager(soundManager);
             Console.WriteLine("[OnLoad] Camera initialized");
 
-            chunkRenderer        = new ChunkRenderer();
-            chunkRenderer.SetFog(settings.FogStart, settings.FogEnd);
-            selectionRenderer    = new SelectionRenderer();
-            crosshairRenderer    = new CrosshairRenderer();
-            uiRenderer           = new UIRenderer();
-            fontRenderer         = new FontRenderer();
-            inventorySystem      = new InventorySystem();
-            hotbarSystem         = new HotbarSystem(inventorySystem);
-            blockPreviewRenderer = new BlockPreviewRenderer();
-            inventoryUI          = new InventoryUI(inventorySystem, hotbarSystem, uiRenderer, fontRenderer, blockPreviewRenderer);
-            inventoryUI.UpdateScreenSize(Size.X, Size.Y);
+            // Load inventory after world save directory is available
+            string invPath = inventorySystem.GetSaveFilePath(world);
+            inventorySystem.LoadFromFile(invPath);
+            Console.WriteLine($"[OnLoad] Inventory loaded from {invPath}");
 
-            // Starter blocks
-            inventorySystem.AddItem(BlockType.Grass,      64);
-            inventorySystem.AddItem(BlockType.Dirt,       64);
-            inventorySystem.AddItem(BlockType.Stone,      64);
-            inventorySystem.AddItem(BlockType.MapleLog,   32);
-            inventorySystem.AddItem(BlockType.MapleLeaves, 32);
-            Console.WriteLine("[OnLoad] Inventory seeded");
-
-            BlockPreviewRenderer.SetSharedTexture(chunkRenderer.TextureId);
-
-            skySystem = new SkySystem();
-            skySystem.SetDayLength(600f);
-            skyRenderer = new SkyRenderer();
-            Console.WriteLine("[OnLoad] Sky initialized");
-
-            weatherSystem = new WeatherSystem();
-            weatherSystem.SetWeather(WeatherType.Clear);
-            weatherSystem.SetQuality(WeatherQuality.Medium);
-
-            blockParticles = new BlockParticleSystem(200);
             blockParticles.SetWorld(world);
-            blockParticles.SetTexture(chunkRenderer.TextureId);
-            Console.WriteLine("[OnLoad] Effects initialized");
-
-            soundManager = new SoundManager();
-            Console.WriteLine("[OnLoad] Sound system initialized");
-
-            CursorState = CursorState.Grabbed;
-            Console.WriteLine($"[OnLoad] Render dist: {world.RenderDistance} | Full detail: {world.FullDetailDistance}");
-            Console.WriteLine("[OnLoad] Complete!");
+            Console.WriteLine("[OnLoad] World objects initialized");
         }
 
         protected override void OnUpdateFrame(FrameEventArgs args)
         {
             base.OnUpdateFrame(args);
+
+            // Handle main menu
+            if (isInMainMenu)
+            {
+                mainMenuSystem.Update(args.Time);
+                mainMenuSystem.HandleInput(KeyboardState, MouseState);
+                if (mainMenuSystem.ShouldStartGame)
+                {
+                    isInMainMenu = false;
+                    mainMenuSystem.ShouldStartGame = false;
+
+                    // Get the selected world path from the menu
+                    var selectedWorld = mainMenuSystem.SelectedWorld;
+                    if (selectedWorld != null)
+                    {
+                        _selectedWorldPath = selectedWorld.Path;
+                        _selectedWorldSeed = (int)selectedWorld.Seed;
+                        _needsWorldReinit = true;
+                        Console.WriteLine($"[Game] Starting with world: {selectedWorld.Name} at {_selectedWorldPath} (seed: {_selectedWorldSeed})");
+                    }
+                    else
+                    {
+                        _selectedWorldPath = null;
+                        _selectedWorldSeed = 12345;
+                        _needsWorldReinit = true;
+                        Console.WriteLine("[Game] Starting new game (no world selected)");
+                    }
+
+                    CursorState = CursorState.Grabbed;
+                    Console.WriteLine("[Game] Starting game from menu");
+                }
+                return;
+            }
+
+            // FIX 2: Return after init so world is not ticked on the same frame it's
+            // created. OnRenderFrame's null guard (Fix 1) covers this frame safely.
+            if (_needsWorldReinit)
+            {
+                _needsWorldReinit = false;
+                InitializeWorldObjects();
+                Console.WriteLine("[Game] World reinitialized after menu");
+                return;
+            }
+
             totalTime      += args.Time;
             frameCount++;
             fpsAccumulator += (float)args.Time;
@@ -232,11 +338,32 @@ namespace PerigonForge
             if (f8Down && !_f8WasDown) isDebugMode = !isDebugMode;
             _f8WasDown = f8Down;
 
+            // F — toggle flying (only if creative mode is enabled)
+            bool fDown = kb.IsKeyDown(Keys.F);
+            if (fDown && !_fWasDown && isCreative)
+            {
+                canFly = !canFly;
+                camera.IsFlying = canFly;
+                Console.WriteLine($"[Game] Flying {(canFly ? "enabled" : "disabled")}");
+            }
+            _fWasDown = fDown;
+
             // ── Tick simulation ────────────────────────────────────────────────────
             world.Update(camera.Position);
             skySystem.UpdateSky((float)args.Time);
             weatherSystem.Update((float)args.Time, camera.Position, skySystem.TimeOfDay);
             blockParticles.Update((float)args.Time, camera.Position);
+            blockOverlaySystem.Update((float)args.Time, camera.Position, world);
+
+            // ── Periodic inventory save ───────────────────────────────────────────────
+            long nowMs = (long)(totalTime * 1000);
+            if ((nowMs - _lastInventorySaveTick) >= INVENTORY_SAVE_INTERVAL_MS)
+            {
+                _lastInventorySaveTick = nowMs;
+                string invPath = inventorySystem.GetSaveFilePath(world);
+                inventorySystem.SaveToFile(invPath);
+                Console.WriteLine($"[Game] Inventory saved to {invPath}");
+            }
 
             // ── Mode-specific input ────────────────────────────────────────────────
 
@@ -274,8 +401,22 @@ namespace PerigonForge
             // Hotbar slot keys 1–9 and scroll wheel.
             for (int i = 0; i < 9; i++)
                 if (kb.IsKeyDown(Keys.D1 + i)) hotbarSystem.SwitchSlot(i);
-            if (mouse.ScrollDelta.Y > 0) hotbarSystem.PreviousSlot();
-            if (mouse.ScrollDelta.Y < 0) hotbarSystem.NextSlot();
+
+            // Mouse wheel: inventory panel scroll OR hotbar selection
+            if (mouse.ScrollDelta.Y != 0)
+            {
+                if (inventorySystem.IsOpen)
+                {
+                    // When inventory is open, scroll the side panel
+                    inventoryUI.HandleMouseWheel(mouse.ScrollDelta.Y);
+                }
+                else
+                {
+                    // When inventory is closed, switch hotbar slots
+                    if (mouse.ScrollDelta.Y > 0) hotbarSystem.PreviousSlot();
+                    if (mouse.ScrollDelta.Y < 0) hotbarSystem.NextSlot();
+                }
+            }
 
             camera.ProcessKeyboard(kb, (float)args.Time);
 
@@ -289,7 +430,11 @@ namespace PerigonForge
             bool rmbDown = mouse.IsButtonDown(MouseButton.Right);
 
             if (lmbDown && !_lmbWasDown) BreakBlock();
-            if (rmbDown && !_rmbWasDown) PlaceBlock();
+            if (rmbDown && !_rmbWasDown)
+            {
+                // Normal block placement on right-click
+                PlaceBlock();
+            }
 
             _lmbWasDown = lmbDown;
             _rmbWasDown = rmbDown;
@@ -321,6 +466,27 @@ namespace PerigonForge
         {
             base.OnRenderFrame(args);
 
+            // Render main menu
+            if (isInMainMenu)
+            {
+                GL.ClearColor(0.1f, 0.05f, 0.15f, 1f);
+                GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                mainMenuSystem.Render();
+                SwapBuffers();
+                return;
+            }
+
+            // FIX 1: world is null on the frame immediately after the menu exits
+            // (OnUpdateFrame sets _needsWorldReinit and returns; world isn't created
+            // until the *next* update tick). Render a blank frame and wait.
+            if (world == null)
+            {
+                GL.ClearColor(0.1f, 0.05f, 0.15f, 1f);
+                GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                SwapBuffers();
+                return;
+            }
+
             Vector4 sky = skySystem.CurrentSkyColor;
             GL.ClearColor(sky.X, sky.Y, sky.Z, 1f);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
@@ -328,17 +494,22 @@ namespace PerigonForge
             GL.PolygonMode(MaterialFace.FrontAndBack,
                 wireframeMode ? PolygonMode.Line : PolygonMode.Fill);
 
+            // Cache camera position at the start of render frame to ensure
+            // consistency across frustum culling, chunk visibility checks, and rendering.
+            // This prevents visual glitches during fast camera movement where different
+            // parts of the render pipeline would see different camera positions.
+            Vector3 cachedCameraPosition = camera.Position;
             Matrix4 view       = camera.GetViewMatrix();
             Matrix4 projection = camera.GetProjectionMatrix(Size.X, Size.Y);
             world.UpdateFrustum(view * projection);
             world.TotalVisibleChunks = world.TotalCulledChunks = world.FullDetailChunks = 0;
 
             // ── 1. Sky ─────────────────────────────────────────────────────────────
-            skyRenderer.RenderSky(view, projection, skySystem);
+            skyRenderer.RenderSky(view, projection, skySystem, cachedCameraPosition);
 
             // ── 2. Upload pending chunk meshes ─────────────────────────────────────
             chunkRenderer.UpdateLighting(skySystem, skySystem.CloudTime);
-            world.UploadPendingChunks(chunkRenderer, budgetMs: 8.0);
+            world.UploadPendingChunks(chunkRenderer, budgetMs: 4.0);  // Reduced for more render time
 
             // ── 3. Build visible chunk lists ───────────────────────────────────────
             _visibleChunks.Clear();
@@ -347,12 +518,14 @@ namespace PerigonForge
             totalVertices  = 0;
             int culledChunks = 0;
 
-            foreach (var chunk in world.GetChunks())
+            // Use snapshot to avoid race conditions while coordinator unloads chunks
+            var chunksSnapshot = world.GetChunksSnapshot();
+            foreach (var chunk in chunksSnapshot)
             {
                 // Check if chunk is disposed before rendering
                 if (chunk.IsDisposed) continue;
                 if (!chunk.IsGenerated) continue;
-                if (!world.IsChunkVisible(chunk, camera.Position)) { culledChunks++; continue; }
+                if (!world.IsChunkVisible(chunk, cachedCameraPosition)) { culledChunks++; continue; }
 
                 if (chunk.Indices3D  != null) totalTriangles += chunk.Indices3D.Length  / 3;
                 if (chunk.Vertices3D != null) totalVertices  += chunk.Vertices3D.Length / 13;
@@ -375,6 +548,21 @@ namespace PerigonForge
                     _transparentChunks.Add(chunk);
             }
 
+            // Sort chunks by distance from camera for proper rendering order
+            // This prevents z-fighting artifacts when chunks are rendered out of order
+            _visibleChunks.Sort((a, b) =>
+            {
+                float distA = (a.WorldPosition - cachedCameraPosition).LengthSquared;
+                float distB = (b.WorldPosition - cachedCameraPosition).LengthSquared;
+                return distA.CompareTo(distB);
+            });
+            _transparentChunks.Sort((a, b) =>
+            {
+                float distA = (a.WorldPosition - cachedCameraPosition).LengthSquared;
+                float distB = (b.WorldPosition - cachedCameraPosition).LengthSquared;
+                return distB.CompareTo(distA);  // Far to near for transparency
+            });
+
             world.TotalVisibleChunks = _visibleChunks.Count + _transparentChunks.Count;
             world.TotalCulledChunks  = culledChunks;
 
@@ -388,34 +576,57 @@ namespace PerigonForge
                          (c.RentedVerts != null && c.RentedVCount > 0)))
                         chunkRenderer.EnsureBuffers(c);
                 }
-                chunkRenderer.RenderChunksOpaque(_visibleChunks, view, projection, camera.Position);
+                chunkRenderer.RenderChunksOpaque(_visibleChunks, view, projection, cachedCameraPosition);
                 totalDrawCalls += _visibleChunks.Count;
             }
 
             // ── 5. Transparent pass (water) ────────────────────────────────────────
             if (_transparentChunks.Count > 0)
             {
+                // Update voxel data texture for water ray-tracing
+                if (chunkRenderer.VoxelDataTexture != null)
+                {
+                    chunkRenderer.VoxelDataTexture.Update(world, cachedCameraPosition);
+                    chunkRenderer.VoxelDataTexture.Bind(5); // Bind to texture unit 5
+                    
+                    // Pass voxel origin to shader for coordinate conversion
+                    var voxelOrigin = chunkRenderer.VoxelDataTexture.GetOrigin();
+                    chunkRenderer.Shader.SetVector3("uVoxelOrigin", new Vector3(voxelOrigin.X, voxelOrigin.Y, voxelOrigin.Z));
+                    
+                    // Enable 3D texture sampling
+                    chunkRenderer.Shader.SetInt("uVoxelData", 5);
+                }
+                
                 foreach (var c in _transparentChunks)
                 {
                     if (c.VAOTransparent == 0 && c.HasTransparentMesh)
                         chunkRenderer.EnsureBuffers(c);
                 }
                 chunkRenderer.SetWaterMode(true);
-                chunkRenderer.RenderChunksTransparent(_transparentChunks, view, projection, camera.Position);
+                chunkRenderer.RenderChunksTransparent(_transparentChunks, view, projection, cachedCameraPosition);
                 totalDrawCalls += _transparentChunks.Count;
+                
+                // Unbind voxel texture after water rendering
+                if (chunkRenderer.VoxelDataTexture != null)
+                {
+                    chunkRenderer.VoxelDataTexture.Unbind();
+                }
             }
 
             // ── 6. Weather ─────────────────────────────────────────────────────────
-            try { weatherSystem.Render(view, projection, camera.Position, weatherSystem.GetGameTime()); }
+            try { weatherSystem.Render(view, projection, cachedCameraPosition, weatherSystem.GetGameTime()); }
             catch (Exception ex) { Console.WriteLine($"[Weather] {ex.Message}"); }
 
             // ── 7. Block particles ─────────────────────────────────────────────────
             try
             {
                 if (blockParticles.GetActiveCount() > 0)
-                    blockParticles.Render(view, projection, camera.Position);
+                    blockParticles.Render(view, projection, cachedCameraPosition);
             }
             catch (Exception ex) { Console.WriteLine($"[BlockParticles] {ex.Message}"); }
+
+            // ── 7b. Block overlay (when inside a block) ───────────────────────────────
+            blockOverlaySystem.Render();
 
             // ── 8. UI ──────────────────────────────────────────────────────────────
             if (settings.IsInSettings)
@@ -430,6 +641,7 @@ namespace PerigonForge
             }
 
             RenderHotbar();
+            inventoryUI.UpdateTime(totalTime);
             if (inventorySystem.IsOpen) inventoryUI.Render();
             if (isDebugMode)            RenderDebugUI();
 
@@ -441,6 +653,9 @@ namespace PerigonForge
         protected override void OnMouseMove(MouseMoveEventArgs e)
         {
             base.OnMouseMove(e);
+
+            // Safety checks - these objects may not be initialized yet in menu
+            if (inventorySystem == null || settings == null || camera == null) return;
 
             // Always forward mouse position to inventory UI while it's open.
             if (inventorySystem.IsOpen)
@@ -461,15 +676,24 @@ namespace PerigonForge
             base.OnResize(e);
             GL.Viewport(0, 0, e.Width, e.Height);
             inventoryUI?.UpdateScreenSize(e.Width, e.Height);
+            mainMenuSystem?.UpdateScreenSize(e.Width, e.Height);
         }
 
         protected override void OnUnload()
         {
             base.OnUnload();
+            mainMenuSystem?.Dispose();
             if (world != null)
             {
                 Console.WriteLine("[Game] Saving chunks...");
                 world.SaveAllChunks();
+            }
+            // Save inventory on shutdown (only if world was initialized)
+            if (world != null)
+            {
+                string invPath = inventorySystem.GetSaveFilePath(world);
+                inventorySystem.SaveToFile(invPath);
+                Console.WriteLine($"[Game] Inventory saved to {invPath}");
             }
             world?.Dispose();
             chunkRenderer?.Dispose();
@@ -480,7 +704,6 @@ namespace PerigonForge
             skyRenderer?.Dispose();
             blockPreviewRenderer?.Dispose();
             weatherSystem?.Dispose();
-            soundManager?.Dispose();
         }
 
         // ── Block interaction ──────────────────────────────────────────────────────
@@ -496,7 +719,8 @@ namespace PerigonForge
 
             world.SetVoxel(v.VoxelPos.X, v.VoxelPos.Y, v.VoxelPos.Z, BlockType.Air);
 
-            if (brokenBlock != BlockType.Air && BlockRegistry.IsVisibleInInventory(brokenBlock))
+            // In creative mode, blocks don't get added to inventory when broken
+            if (brokenBlock != BlockType.Air && BlockRegistry.IsVisibleInInventory(brokenBlock) && !isCreative)
                 inventorySystem.AddItem(brokenBlock, 1);
 
             if (brokenBlock != BlockType.Air)
@@ -504,7 +728,6 @@ namespace PerigonForge
                 blockParticles.SpawnBreakParticles(
                     new Vector3(v.VoxelPos.X + 0.5f, v.VoxelPos.Y + 0.5f, v.VoxelPos.Z + 0.5f),
                     brokenBlock);
-                soundManager.PlayBlockBreak(brokenBlock, new Vector3(v.VoxelPos.X + 0.5f, v.VoxelPos.Y + 0.5f, v.VoxelPos.Z + 0.5f));
             }
         }
 
@@ -521,16 +744,80 @@ namespace PerigonForge
 
             if (place == foot || place == head) return;
 
+            // In creative mode (flying), use any block type even if not in inventory
+            bool isCreativeMode = this.isCreative;
+
             var sel = hotbarSystem.GetSelectedBlock();
-            if (!sel.HasValue) return;
 
-            if (inventorySystem.GetItemCount(sel.Value) <= 0) return;
+            // In creative mode, allow placement even with no item selected or empty slot
+            // This gives true creative mode behavior - infinite blocks from any selection
+            if (!isCreative)
+            {
+                if (!sel.HasValue) return;
+                if (inventorySystem.GetItemCount(sel.Value) <= 0) return;
+            }
+            else if (!sel.HasValue)
+            {
+                // In creative mode with nothing selected - can't determine what to place
+                return;
+            }
 
-            world.SetVoxel(place.X, place.Y, place.Z, sel.Value);
-            inventorySystem.RemoveItem(sel.Value, 1);
+            // Calculate rotation based on placement direction (the normal of the hit face)
+            BlockRotation rotation = CalculateBlockRotation(selectedBlock.Value.Normal);
+
+            // Log block placement for debugging
+            Console.WriteLine($"[BlockPlace] Position: {place}, Block: {sel.Value}, Normal: {selectedBlock.Value.Normal}, Rotation: {rotation}");
+
+            // For model blocks with rotation support, use rotation; otherwise use standard placement
+            var def = BlockRegistry.Get(sel.Value);
+            if (def.UseModel && def.SupportsRotation)
+            {
+                world.SetVoxelWithRotation(place.X, place.Y, place.Z, sel.Value, rotation.RotationY, rotation.RotationX);
+                Console.WriteLine($"[BlockPlace] Stored rotation {rotation} for model block {sel.Value}");
+            }
+            else
+            {
+                world.SetVoxel(place.X, place.Y, place.Z, sel.Value);
+            }
+
+            // Only remove item from inventory if NOT in creative mode (flying)
+            if (!isCreative)
+            {
+                inventorySystem.RemoveItem(sel.Value, 1);
+            }
             blockParticles.SpawnPlaceParticles(
                 new Vector3(place.X + 0.5f, place.Y + 0.5f, place.Z + 0.5f), sel.Value);
-            soundManager.PlayBlockPlace(sel.Value, new Vector3(place.X + 0.5f, place.Y + 0.5f, place.Z + 0.5f));
+        }
+
+        /// <summary>
+        /// Calculate block rotation based on placement direction.
+        /// Supports both horizontal (Y-axis) and vertical (X-axis) rotations.
+        ///
+        /// Y-axis rotation (horizontal):
+        /// - 0° = facing -Z (north/back)
+        /// - 90° = facing +X (east/right)
+        /// - 180° = facing +Z (south/front)
+        /// - 270° = facing -X (west/left)
+        ///
+        /// X-axis rotation (vertical):
+        /// - 0° = facing up (+Y)
+        /// - 90° = facing forward (+Z relative to up)
+        /// - 180° = facing down (-Y)
+        /// - 270° = facing backward (-Z relative to down)
+        /// </summary>
+        private BlockRotation CalculateBlockRotation(Vector3i normal)
+        {
+            // Horizontal (Y-axis) rotations based on X and Z faces
+            if (normal.X > 0) return new BlockRotation(0, 90);       // Right face (X+): facing east
+            if (normal.X < 0) return new BlockRotation(0, 270);      // Left face (X-): facing west
+            if (normal.Z > 0) return new BlockRotation(0, 180);      // Front face (Z+): facing south
+            if (normal.Z < 0) return new BlockRotation(0, 0);        // Back face (Z-): facing north
+
+            // Vertical (X-axis) rotations based on Y faces
+            if (normal.Y > 0) return new BlockRotation(0, 0);        // Top face (+Y): facing up
+            if (normal.Y < 0) return new BlockRotation(180, 0);      // Bottom face (-Y): facing down
+
+            return new BlockRotation(0, 0);  // Default: facing up and north
         }
 
         // ── Hotbar ─────────────────────────────────────────────────────────────────
@@ -704,7 +991,7 @@ namespace PerigonForge
             uiRenderer.RenderRectangleOutline(px + 10,        tabY, tabW, tabH, woodDark, 1, sw, sh);
             uiRenderer.RenderRectangleOutline(px + 12 + tabW, tabY, tabW, tabH, woodDark, 1, sw, sh);
             fontRenderer.RenderTextCentered("Graphics", px + 10 + tabW / 2,      tabY + 6, new Vector4(1f, 0.95f, 0.8f, 1f), sw, sh);
-            fontRenderer.RenderTextCentered("Controls", px + 12 + tabW + tabW / 2, tabY + 6, new Vector4(1f, 0.95f, 0.8f, 1f), sw, sh);
+            fontRenderer.RenderTextCentered("Controls & update-logs", px + 12 + tabW + tabW / 2, tabY + 6, new Vector4(1f, 0.95f, 0.8f, 1f), sw, sh);
 
             int contentY = tabY + tabH + 12;
             int contentW = pw - 24;
@@ -771,7 +1058,7 @@ namespace PerigonForge
                 int ly = contentY + 10, lineH = 28;
                 var hint = new Vector4(0.45f, 0.35f, 0.25f, 1f);
 
-                fontRenderer.RenderText("CONTROLS",          lx, ly, accentCol, sw, sh); ly += lineH + 5;
+                fontRenderer.RenderText("CONTROLS & UPDATE-LOGS",          lx, ly, accentCol, sw, sh); ly += lineH + 5;
                 fontRenderer.RenderText("WASD / Arrows – Move",            lx, ly, hint, sw, sh); ly += lineH;
                 fontRenderer.RenderText("Mouse         – Look",            lx, ly, hint, sw, sh); ly += lineH;
                 fontRenderer.RenderText("LMB           – Break block",     lx, ly, hint, sw, sh); ly += lineH;
@@ -785,9 +1072,37 @@ namespace PerigonForge
 
                 uiRenderer.RenderLine(lx, ly, lx + contentW, ly, woodMid, 1, sw, sh); ly += 10;
                 fontRenderer.RenderText("Indev 0.0.3 ",
-
                     lx, ly, new Vector4(0.5f, 0.4f, 0.3f, 1f), sw, sh);
             }
+
+            // EXIT & SAVE button outside panel - top right corner
+            int btnW = 140, btnH = 36;
+            _exitSaveBtnX = px + pw + 16;
+            _exitSaveBtnY = py;
+            _exitSaveBtnW = btnW;
+            _exitSaveBtnH = btnH;
+            DrawExitSaveButton(_exitSaveBtnX, _exitSaveBtnY, btnW, btnH, sw, sh);
+        }
+
+        private void DrawExitSaveButton(int bx, int by, int bw, int bh, int sw, int sh)
+        {
+            float hov = _exitSaveHovered ? 1f : 0f;
+            var btnBg = hov > 0 ? new Vector4(0.60f, 0.25f, 0.10f, 1f) : new Vector4(0.35f, 0.22f, 0.10f, 1f);
+            var btnText = hov > 0 ? new Vector4(1f, 0.95f, 0.8f, 1f) : new Vector4(0.85f, 0.75f, 0.6f, 1f);
+            var btnBorder = hov > 0 ? new Vector4(0.75f, 0.55f, 0.35f, 1f) : new Vector4(0.45f, 0.30f, 0.15f, 1f);
+
+            uiRenderer.RenderRectangle(bx + 4, by + 4, bw, bh, new Vector4(0f, 0f, 0f, 0.3f), sw, sh);
+            uiRenderer.RenderRectangle(bx, by, bw, bh, btnBg, sw, sh);
+            uiRenderer.RenderRectangleOutline(bx, by, bw, bh, btnBorder, hov > 0 ? 2 : 1, sw, sh);
+
+            int tw = FontRenderer.MeasureWidth("EXIT & SAVE");
+            fontRenderer.RenderText("EXIT & SAVE", bx + (bw - tw) / 2, by + (bh - 16) / 2, btnText, sw, sh);
+
+            // Subtitle
+            string sub = "Save and return to menu";
+            int sw2 = FontRenderer.MeasureWidth(sub);
+            var subCol = hov > 0 ? new Vector4(1f, 0.9f, 0.75f, 0.85f) : new Vector4(0.6f, 0.5f, 0.35f, 0.7f);
+            fontRenderer.RenderText(sub, bx + (bw - sw2) / 2, by + bh - 2, subCol, sw, sh);
         }
 
         private void DrawSlider(int bx, int by, int bw, int bh, float pct, int sw, int sh)
@@ -839,8 +1154,25 @@ namespace PerigonForge
                     settingsTab = 0;
                 else if (mx >= px + pw / 2 + 4 && mx <= px + pw / 2 + 4 + tabW && my >= tabY && my <= tabY + tabH)
                     settingsTab = 1;
+
+                // EXIT & SAVE button click
+                if (mx >= _exitSaveBtnX && mx <= _exitSaveBtnX + _exitSaveBtnW &&
+                    my >= _exitSaveBtnY && my <= _exitSaveBtnY + _exitSaveBtnH)
+                {
+                    // Save world and return to main menu
+                    world.SaveAllChunks();
+                    isInMainMenu = true;
+                    settings.IsInSettings = false;
+                    CursorState = CursorState.Normal;
+                    firstMove = true;
+                    return;
+                }
             }
             _settingsLmbWasDown = lmbDown;
+
+            // EXIT & SAVE button hover
+            _exitSaveHovered = mx >= _exitSaveBtnX && mx <= _exitSaveBtnX + _exitSaveBtnW &&
+                            my >= _exitSaveBtnY && my <= _exitSaveBtnY + _exitSaveBtnH;
 
             // Keyboard sliders – render distance.
             if (kb.IsKeyPressed(Keys.W) || kb.IsKeyPressed(Keys.Up))
@@ -900,6 +1232,9 @@ namespace PerigonForge
 
             // Always update hover position.
             inventoryUI.HandleMouseMove(mx, my);
+
+            // Handle mouse up for scrollbar dragging
+            if (!lmbDown && _lmbWasDown) inventoryUI.HandleMouseUp();
 
             // FIX: E / I / Tab to close inventory — previously unreachable because the
             // early return happened before the key checks at the bottom of OnUpdateFrame.

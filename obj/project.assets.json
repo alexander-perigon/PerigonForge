@@ -2,6 +2,12 @@
   "version": 3,
   "targets": {
     "net8.0-windows7.0": {
+      "Microsoft.NET.ILLink.Tasks/8.0.22": {
+        "type": "package",
+        "build": {
+          "build/Microsoft.NET.ILLink.Tasks.props": {}
+        }
+      },
       "Microsoft.Win32.SystemEvents/8.0.0": {
         "type": "package",
         "compile": {
@@ -247,9 +253,284 @@
           }
         }
       }
+    },
+    "net8.0-windows7.0/win-x64": {
+      "Microsoft.NET.ILLink.Tasks/8.0.22": {
+        "type": "package",
+        "build": {
+          "build/Microsoft.NET.ILLink.Tasks.props": {}
+        }
+      },
+      "Microsoft.Win32.SystemEvents/8.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "runtimes/win/lib/net8.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        }
+      },
+      "OpenTK/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "OpenTK.Audio.OpenAL": "4.8.0",
+          "OpenTK.Compute": "4.8.0",
+          "OpenTK.Core": "4.8.0",
+          "OpenTK.Graphics": "4.8.0",
+          "OpenTK.Input": "4.8.0",
+          "OpenTK.Mathematics": "4.8.0",
+          "OpenTK.Windowing.Common": "4.8.0",
+          "OpenTK.Windowing.Desktop": "4.8.0",
+          "OpenTK.Windowing.GraphicsLibraryFramework": "4.8.0"
+        }
+      },
+      "OpenTK.Audio.OpenAL/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "OpenTK.Core": "[4.8.0, 4.9.0)",
+          "OpenTK.Mathematics": "[4.8.0, 4.9.0)"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Audio.OpenAL.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Audio.OpenAL.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Compute/4.8.0": {
+        "type": "package",
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Compute.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Compute.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Core/4.8.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/OpenTK.Core.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/OpenTK.Core.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Graphics/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "OpenTK.Core": "[4.8.0, 4.9.0)",
+          "OpenTK.Mathematics": "[4.8.0, 4.9.0)"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Graphics.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Graphics.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Input/4.8.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/OpenTK.Input.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/OpenTK.Input.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Mathematics/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Runtime.CompilerServices.Unsafe": "5.0.0"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Mathematics.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Mathematics.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.redist.glfw/3.3.8.38": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/_._": {}
+        },
+        "native": {
+          "runtimes/win-x64/native/glfw3.dll": {}
+        }
+      },
+      "OpenTK.Windowing.Common/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "OpenTK.Core": "[4.8.0, 4.9.0)",
+          "OpenTK.Mathematics": "[4.8.0, 4.9.0)"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Windowing.Common.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Windowing.Common.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Windowing.Desktop/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "OpenTK.Core": "[4.8.0, 4.9.0)",
+          "OpenTK.Mathematics": "[4.8.0, 4.9.0)",
+          "OpenTK.Windowing.Common": "[4.8.0, 4.9.0)",
+          "OpenTK.Windowing.GraphicsLibraryFramework": "[4.8.0, 4.9.0)"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Windowing.Desktop.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Windowing.Desktop.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "OpenTK.Windowing.GraphicsLibraryFramework/4.8.0": {
+        "type": "package",
+        "dependencies": {
+          "OpenTK.Core": "[4.8.0, 4.9.0)",
+          "OpenTK.redist.glfw": "3.3.8.38"
+        },
+        "compile": {
+          "lib/netcoreapp3.1/OpenTK.Windowing.GraphicsLibraryFramework.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp3.1/OpenTK.Windowing.GraphicsLibraryFramework.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "System.Drawing.Common/8.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "8.0.0"
+        },
+        "compile": {
+          "lib/net8.0/System.Drawing.Common.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/System.Drawing.Common.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        }
+      },
+      "System.Runtime.CompilerServices.Unsafe/5.0.0": {
+        "type": "package",
+        "compile": {
+          "ref/netstandard2.1/System.Runtime.CompilerServices.Unsafe.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/System.Runtime.CompilerServices.Unsafe.dll": {
+            "related": ".xml"
+          }
+        }
+      }
     }
   },
   "libraries": {
+    "Microsoft.NET.ILLink.Tasks/8.0.22": {
+      "sha512": "MhcMithKEiyyNkD2ZfbDZPmcOdi0GheGfg8saEIIEfD/fol3iHmcV8TsZkD4ZYz5gdUuoX4YtlVySUU7Sxl9SQ==",
+      "type": "package",
+      "path": "microsoft.net.illink.tasks/8.0.22",
+      "hasTools": true,
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "Sdk/Sdk.props",
+        "THIRD-PARTY-NOTICES.TXT",
+        "analyzers/dotnet/cs/ILLink.CodeFixProvider.dll",
+        "analyzers/dotnet/cs/ILLink.RoslynAnalyzer.dll",
+        "build/Microsoft.NET.ILLink.Analyzers.props",
+        "build/Microsoft.NET.ILLink.Tasks.props",
+        "build/Microsoft.NET.ILLink.targets",
+        "microsoft.net.illink.tasks.8.0.22.nupkg.sha512",
+        "microsoft.net.illink.tasks.nuspec",
+        "tools/net472/ILLink.Tasks.dll",
+        "tools/net472/ILLink.Tasks.dll.config",
+        "tools/net472/Mono.Cecil.Mdb.dll",
+        "tools/net472/Mono.Cecil.Pdb.dll",
+        "tools/net472/Mono.Cecil.Rocks.dll",
+        "tools/net472/Mono.Cecil.dll",
+        "tools/net472/Sdk/Sdk.props",
+        "tools/net472/System.Buffers.dll",
+        "tools/net472/System.Collections.Immutable.dll",
+        "tools/net472/System.Memory.dll",
+        "tools/net472/System.Numerics.Vectors.dll",
+        "tools/net472/System.Reflection.Metadata.dll",
+        "tools/net472/System.Runtime.CompilerServices.Unsafe.dll",
+        "tools/net472/build/Microsoft.NET.ILLink.Analyzers.props",
+        "tools/net472/build/Microsoft.NET.ILLink.Tasks.props",
+        "tools/net472/build/Microsoft.NET.ILLink.targets",
+        "tools/net8.0/ILLink.Tasks.deps.json",
+        "tools/net8.0/ILLink.Tasks.dll",
+        "tools/net8.0/Mono.Cecil.Mdb.dll",
+        "tools/net8.0/Mono.Cecil.Pdb.dll",
+        "tools/net8.0/Mono.Cecil.Rocks.dll",
+        "tools/net8.0/Mono.Cecil.dll",
+        "tools/net8.0/Sdk/Sdk.props",
+        "tools/net8.0/build/Microsoft.NET.ILLink.Analyzers.props",
+        "tools/net8.0/build/Microsoft.NET.ILLink.Tasks.props",
+        "tools/net8.0/build/Microsoft.NET.ILLink.targets",
+        "tools/net8.0/illink.deps.json",
+        "tools/net8.0/illink.dll",
+        "tools/net8.0/illink.runtimeconfig.json",
+        "useSharedDesignerContext.txt"
+      ]
+    },
     "Microsoft.Win32.SystemEvents/8.0.0": {
       "sha512": "9opKRyOKMCi2xJ7Bj7kxtZ1r9vbzosMvRrdEhVhDz8j8MoBGgB+WmC94yH839NPH+BclAjtQ/pyagvi/8gDLkw==",
       "type": "package",
@@ -526,6 +807,7 @@
   },
   "projectFileDependencyGroups": {
     "net8.0-windows7.0": [
+      "Microsoft.NET.ILLink.Tasks >= 8.0.22",
       "OpenTK >= 4.8.0",
       "System.Drawing.Common >= 8.0.0"
     ]
@@ -536,11 +818,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
+      "projectUniqueName": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
       "projectName": "PerigonForge",
-      "projectPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
+      "projectPath": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\perigonforge.csproj",
       "packagesPath": "C:\\Users\\alexa\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\obj\\",
+      "outputPath": "c:\\Users\\alexa\\Downloads\\PerigonForge\\PerigonForge-main\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\alexa\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -573,6 +855,12 @@
       "net8.0-windows7.0": {
         "targetAlias": "net8.0-windows",
         "dependencies": {
+          "Microsoft.NET.ILLink.Tasks": {
+            "suppressParent": "All",
+            "target": "Package",
+            "version": "[8.0.22, )",
+            "autoReferenced": true
+          },
           "OpenTK": {
             "target": "Package",
             "version": "[4.8.0, )"
@@ -593,12 +881,31 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Runtime.win-x64",
+            "version": "[8.0.22, 8.0.22]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Runtime.win-x64",
+            "version": "[8.0.22, 8.0.22]"
+          },
+          {
+            "name": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+            "version": "[8.0.22, 8.0.22]"
+          }
+        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
         "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.100/PortableRuntimeIdentifierGraph.json"
+      }
+    },
+    "runtimes": {
+      "win-x64": {
+        "#import": []
       }
     }
   }

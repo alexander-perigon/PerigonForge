@@ -1,5 +1,12 @@
 c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\audio\grassyMountains.mp3
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\audio\Q.wav
 c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\Blocks\Atlas.png
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\Blocks\models\chair.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\Blocks\models\ladder.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\Blocks\models\slab.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\Blocks\models\stairs.obj
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\menu\Background.png
+c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\Resources\menu\PerigonForge.png
 c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\PerigonForge.exe
 c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\PerigonForge.deps.json
 c:\Users\alexa\Downloads\PerigonForge\PerigonForge-main\bin\Release\net8.0-windows\win-x64\PerigonForge.runtimeconfig.json

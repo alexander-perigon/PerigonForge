@@ -4,94 +4,29 @@ using OpenTK.Mathematics;
 
 namespace PerigonForge
 {
-        // ══════════════════════════════════════════════════════════════════════════════
-        // TEXTURE ATLAS COORDINATE SYSTEM
-        // ══════════════════════════════════════════════════════════════════════════════
-        // This texture atlas uses a STANDARD TOP-LEFT ORIGIN coordinate system:
-        //
-        //   • Origin (0,0) = TOP-LEFT corner of the texture atlas
-        //   • Maximum extent (TilesPerRow-1, TilesPerRow-1) = BOTTOM-RIGHT corner
-        //   • UV coordinates: (0,0) at top-left → (1,1) at bottom-right
-        //
-        // Coordinate System:
-        //   ┌─────────────────────────────────────────────┐
-        //   │ (0,0) (1,0) (2,0) (3,0)                    │ ← Row 0 (Y=0, TOP)
-        //   │ (0,1) (1,1) (2,1) (3,1)                    │ ← Row 1 (Y=1)
-        //   │ (0,2) (1,2) (2,2) (3,2)                    │ ← Row 2 (Y=2)
-        //   │ (0,3) (1,3) (2,3) (3,3)                    │ ← Row 3 (Y=3, BOTTOM)
-        //   └─────────────────────────────────────────────┘
-        //     X→
-        //
-        // Tile Indexing: tileX = column (0 to TilesPerRow-1), tileY = row (0 to TilesPerRow-1)
-        // UV Calculation: v = tileY * (TileSize/AtlasSize), so Y increases going DOWN
-        //
-        // This allows straightforward coordinate math:
-        //   • To get UV at origin: (tileX * tileSize/AtlasSize, tileY * tileSize/AtlasSize)
-        //   • To get UV at max extent: (u + tileSize/AtlasSize, v + tileSize/AtlasSize)
-        // ══════════════════════════════════════════════════════════════════════════════
-        /// <summary>
-        /// Texture Atlas Coordinate System - Top-Left Origin
-        /// 
-        /// This class provides the canonical texture atlas coordinate system for PerigonForge.
-        /// The atlas uses a standard top-left origin coordinate system where:
-        /// 
-        ///   • UV (0, 0) = Top-left corner of the texture
-        ///   • UV (1, 1) = Bottom-right corner of the texture
-        ///   • Tile coordinates increase: X goes right, Y goes down
-        /// 
-        /// VALID TILE RANGES:
-        ///   • tileX: 0 to TilesPerRow-1 (columns, left to right)
-        ///   • tileY: 0 to TilesPerRow-1 (rows, top to bottom)
-        /// 
-        /// Example: For a 4x4 atlas (128x128 texture with 32x32 tiles):
-        ///   • Tile (0, 0) = Top-left tile, UV range: (0,0) to (0.25, 0.25)
-        ///   • Tile (3, 3) = Bottom-right tile, UV range: (0.75, 0.75) to (1.0, 1.0)
-        /// 
-        /// USE THIS SYSTEM WHEN:
-        ///   • Adding new block textures to the atlas
-        ///   • Calculating UV coordinates for custom meshes
-        ///   • Positioning UV blocks within the texture surface
-        /// 
-        /// MATHEMATICAL FOUNDATION:
-        ///   Origin UV = (tileX * TileSizeNormalized, tileY * TileSizeNormalized)
-        ///   Max Extent UV = ((tileX + 1) * TileSizeNormalized, (tileY + 1) * TileSizeNormalized)
-        /// </summary>
         public static class TextureAtlas
     {
-        // Atlas dimensions
-        public const int AtlasSize = 128;      // Total atlas texture size in pixels
-        public const int TileSize = 32;        // Individual tile size in pixels
-        public const int Padding = 0;          // Padding between tiles in pixels
-        public const int TilesPerRow = 4;      // Number of tiles per row (4x4 = 16 tiles)
-        public const float UV_BORDER = 0f;     // UV space border (0 = no border)
+        public const int AtlasSize = 128;
+        public const int TileSize = 32;
+        public const int Padding = 0;
+        public const int TilesPerRow = 4;
+        public const float UV_BORDER = 0f;
 
         // Calculated constants for UV coordinate math
-        public const float TileSizeNormalized = (float)TileSize / AtlasSize;  // 0.25 (1/4)
-        public const float MaxUV = 1.0f;       // Maximum UV coordinate (bottom-right)
-
-        /// <summary>
-        /// Gets the UV coordinates for a tile at the specified position.
-        /// Uses TOP-LEFT origin: tileX increases right, tileY increases down.
-        /// </summary>
-        /// <param name="tileX">Column index (0 = leftmost column)</param>
-        /// <param name="tileY">Row index (0 = topmost row)</param>
-        /// <returns>Array of 4 Vector2: [top-left, top-right, bottom-right, bottom-left]</returns>
+        public const float TileSizeNormalized = (float)TileSize / AtlasSize;
+        public const float MaxUV = 1.0f;
         public static Vector2[] GetTileUVs(int tileX, int tileY)
         {
-            // Calculate UV coordinates using top-left origin system
-            // u increases going right (X axis), v increases going down (Y axis)
-            float u0 = tileX * TileSizeNormalized;           // Left edge of tile
-            float v0 = tileY * TileSizeNormalized;           // Top edge of tile (Y=0 at top)
-            float u1 = u0 + TileSizeNormalized;              // Right edge of tile
-            float v1 = v0 + TileSizeNormalized;              // Bottom edge of tile
-
-            // Return UVs in standard quad order: top-left, top-right, bottom-right, bottom-left
+            float u0 = tileX * TileSizeNormalized;
+            float v0 = tileY * TileSizeNormalized;
+            float u1 = u0 + TileSizeNormalized;
+            float v1 = v0 + TileSizeNormalized;
             return new Vector2[]
             {
-                new(u0, v0),  // Top-left (origin)
-                new(u1, v0),  // Top-right
-                new(u1, v1),  // Bottom-right (max extent for this tile)
-                new(u0, v1)   // Bottom-left
+                new(u0, v0),  
+                new(u1, v0),  
+                new(u1, v1),  
+                new(u0, v1)   
             };
         }
 
@@ -130,6 +65,12 @@ namespace PerigonForge
         public bool    CanFall          { get; set; }
         public float   Buoyancy         { get; set; }
         public bool    IsVisibleInInventory { get; set; }
+        public bool    UseModel         { get; set; }
+        public string  ModelURL         { get; set; }
+        public bool    SupportsRotation { get; set; }
+        public bool    IsSittable       { get; set; }
+        public bool    IsClimmable      { get; set; }
+        public bool    IsSteppable      { get; set; }
         public readonly float Opacity      => UsesFlatColor ? FlatColor.W : 1f;
         public readonly bool  NeedsBlending=> (IsTransparent||IsLiquid)&&Opacity>0f&&Opacity<1f;
     }
@@ -141,7 +82,7 @@ namespace PerigonForge
         private static readonly Dictionary<int,BlockDefinition> _blocks=new();
         private static int _nextDynamicId=5;
         private static bool _initialized=false;
-        private static BlockDefinition[] _cache=Array.Empty<BlockDefinition>();
+        private static BlockDefinition?[] _cache = new BlockDefinition?[256];
         private static bool _cacheValid=false;
         private static byte[] _cullFlags=new byte[256];
         private const byte FLAG_OPAQUE=1,FLAG_TRANSPARENT=2,FLAG_SAME_TYPE_CULL=4;
@@ -150,8 +91,11 @@ namespace PerigonForge
         private static void EnsureCache()
         {
             if(_cacheValid)return;
-            if(_cache.Length!=256)_cache=new BlockDefinition[256];
+            if(_cache.Length!=256)_cache = new BlockDefinition?[256];
             Array.Clear(_cullFlags,0,256);
+            // Ensure index 0 always has the Air block definition
+            if (_blocks.TryGetValue(0, out var airDef))
+                _cache[0] = airDef;
             foreach(var kvp in _blocks){
                 int id=kvp.Key;if(id<0||id>255)continue;
                 _cache[id]=kvp.Value;var def=kvp.Value;
@@ -160,14 +104,14 @@ namespace PerigonForge
             }
             _cacheValid=true;
         }
-        public static BlockDefinition GetCached(int id){EnsureCache();return id>=0&&id<256?_cache[id]:_cache[0];}
+        public static BlockDefinition GetCached(int id){EnsureCache();if(id<0||id>=256)return _cache[0] ?? _blocks[0];var cached = _cache[id];return cached ?? _blocks[0];}
         public static bool ShouldCullFaceCached(int self,int nb){EnsureCache();if(nb==0)return false;byte sf=self>=0&&self<256?_cullFlags[self]:(byte)0,nf=nb>=0&&nb<256?_cullFlags[nb]:(byte)0;if((sf&FLAG_OPAQUE)!=0)return(nf&FLAG_OPAQUE)!=0;if((sf&FLAG_TRANSPARENT)!=0)return nb==self;return false;}
         private static void RegisterCore(BlockType t,BlockDefinition d){EnforceInvariants(ref d);_blocks[(int)t]=d;}
         private static void EnforceInvariants(ref BlockDefinition d){if(d.IsLiquid)d.IsSolid=false;if(d.Opacity<=0f)d.IsSolid=false;}
         private static int ResolveNewId(int? f){if(f.HasValue){int fid=f.Value;if(fid<5||fid>255)throw new ArgumentOutOfRangeException(nameof(f),$"Custom IDs must be 5–255 (got {fid}).");if(_blocks.ContainsKey(fid))throw new InvalidOperationException($"Block ID {fid} already registered.");return fid;}int n=NextAvailableId;if(n>255)throw new InvalidOperationException("Block ID space exhausted.");return n;}
-        public static BlockDefinition Get(int id){if(!_initialized)Initialize();return _blocks.TryGetValue(id,out var d)?d:_blocks[0];}
+        public static BlockDefinition Get(int id){if(!_initialized)Initialize();if(_cacheValid)return GetCached(id);return _blocks.TryGetValue(id,out var d)?d:(_blocks.TryGetValue(0, out var airDef) ? airDef : throw new InvalidOperationException("Block 0 (Air) not found"));}
         public static BlockDefinition Get(BlockType t)=>Get((int)t);
-        public static int RegisterBlock(string name,int? forcedId=null,Vector2i topAtlasTile=default,Vector2i bottomAtlasTile=default,Vector2i sideAtlasTile=default,bool usesFlatColor=false,Vector4 flatColor=default,Vector4 particleColor=default,bool isSolid=true,bool isTransparent=false,bool isLiquid=false,bool canFall=false,float buoyancy=0f,bool isVisibleInInventory=true){if(!_initialized)Initialize();int id=ResolveNewId(forcedId);var def=new BlockDefinition{Name=name,TopAtlasTile=topAtlasTile,BottomAtlasTile=bottomAtlasTile,SideAtlasTile=sideAtlasTile,UsesFlatColor=usesFlatColor,FlatColor=flatColor,ParticleColor=particleColor,IsSolid=isSolid,IsTransparent=isTransparent,IsLiquid=isLiquid,CanFall=canFall,Buoyancy=buoyancy,IsVisibleInInventory=isVisibleInInventory};EnforceInvariants(ref def);_blocks[id]=def;InvalidateCache();return id;}
+        public static int RegisterBlock(string name,int? forcedId=null,Vector2i topAtlasTile=default,Vector2i bottomAtlasTile=default,Vector2i sideAtlasTile=default,bool usesFlatColor=false,Vector4 flatColor=default,Vector4 particleColor=default,bool isSolid=true,bool isTransparent=false,bool isLiquid=false,bool canFall=false,float buoyancy=0f,bool isVisibleInInventory=true,bool useModel=false,string modelURL="",bool supportsRotation=true,bool isSittable=false,bool isClimmable=false,bool isSteppable=false){if(!_initialized)Initialize();int id=ResolveNewId(forcedId);var def=new BlockDefinition{Name=name,TopAtlasTile=topAtlasTile,BottomAtlasTile=bottomAtlasTile,SideAtlasTile=sideAtlasTile,UsesFlatColor=usesFlatColor,FlatColor=flatColor,ParticleColor=particleColor,IsSolid=isSolid,IsTransparent=isTransparent,IsLiquid=isLiquid,CanFall=canFall,Buoyancy=buoyancy,IsVisibleInInventory=isVisibleInInventory,UseModel=useModel,ModelURL=modelURL,SupportsRotation=supportsRotation,IsSittable=isSittable,IsClimmable=isClimmable,IsSteppable=isSteppable};EnforceInvariants(ref def);_blocks[id]=def;InvalidateCache();return id;}
         public static void OverrideBlock(BlockType t,BlockDefinition d){if(!_initialized)Initialize();EnforceInvariants(ref d);_blocks[(int)t]=d;InvalidateCache();}
         public static bool   IsSolid(int id)                   => Get(id).IsSolid;
         public static bool   IsSolid(BlockType t)              => Get(t).IsSolid;
@@ -189,8 +133,31 @@ namespace PerigonForge
         public static bool   NeedsBlending(BlockType t)        => Get(t).NeedsBlending;
         public static bool   IsVisibleInInventory(int id)      => Get(id).IsVisibleInInventory;
         public static bool   IsVisibleInInventory(BlockType t) => Get(t).IsVisibleInInventory;
+        public static bool   SupportsRotation(int id)          => Get(id).SupportsRotation;
+        public static bool   SupportsRotation(BlockType t)     => Get(t).SupportsRotation;
         public static Vector4 GetParticleColor(int id)         => Get(id).ParticleColor;
         public static Vector4 GetParticleColor(BlockType t)   => Get(t).ParticleColor;
+        public static bool   IsSittable(int id)                => Get(id).IsSittable;
+        public static bool   IsSittable(BlockType t)           => Get(t).IsSittable;
+        public static bool   IsClimmable(int id)               => Get(id).IsClimmable;
+        public static bool   IsClimmable(BlockType t)          => Get(t).IsClimmable;
+        public static bool   IsSteppable(int id)               => Get(id).IsSteppable;
+        public static bool   IsSteppable(BlockType t)          => Get(t).IsSteppable;
+        
+        /// <summary>
+        /// FIX 8: Get dominant color for LOD rendering (simplified mesh for far chunks).
+        /// Returns the flat color if the block uses one, otherwise derives from particle color.
+        /// </summary>
+        public static Vector4 GetLODColor(int id)
+        {
+            var def = Get(id);
+            if (def.UsesFlatColor) return def.FlatColor;
+            var pColor = def.ParticleColor;
+            // If particle color is set, use it; otherwise use a sensible default
+            return pColor.W > 0.01f ? pColor : new Vector4(0.8f, 0.8f, 0.8f, 1f);
+        }
+        public static Vector4 GetLODColor(BlockType t) => GetLODColor((int)t);
+        
         public static bool   IsRegistered(int id)              {if(!_initialized)Initialize();return _blocks.ContainsKey(id);}
         public static int    NextAvailableId                   {get{if(!_initialized)Initialize();while(_nextDynamicId<=255&&_blocks.ContainsKey(_nextDynamicId))_nextDynamicId++;return _nextDynamicId;}}
         public static IEnumerable<int> GetAllIds()             {if(!_initialized)Initialize();return _blocks.Keys;}
@@ -227,9 +194,9 @@ namespace PerigonForge
                 UsesFlatColor        = false,
                 FlatColor            = Vector4.Zero,
                 ParticleColor        = new Vector4(0.3f, 0.7f, 0.25f, 1f),
-                TopAtlasTile         = new Vector2i(1, 2),  // bright green top
-                BottomAtlasTile      = new Vector2i(2, 2),  // dirt
-                SideAtlasTile        = new Vector2i(0, 2),  // grass side (green+brown)
+                TopAtlasTile         = new Vector2i(1, 2),  
+                BottomAtlasTile      = new Vector2i(2, 2),  
+                SideAtlasTile        = new Vector2i(0, 2),  
                 IsSolid              = true,
                 IsTransparent        = false,
                 IsLiquid             = false,
@@ -244,7 +211,7 @@ namespace PerigonForge
                 UsesFlatColor        = false,
                 FlatColor            = Vector4.Zero,
                 ParticleColor        = new Vector4(0.45f, 0.32f, 0.22f, 1f),
-                TopAtlasTile         = new Vector2i(2, 2),  // dirt brown
+                TopAtlasTile         = new Vector2i(2, 2), 
                 BottomAtlasTile      = new Vector2i(2, 2),
                 SideAtlasTile        = new Vector2i(2, 2),
                 IsSolid              = true,
@@ -261,7 +228,7 @@ namespace PerigonForge
                 UsesFlatColor        = false,
                 FlatColor            = Vector4.Zero,
                 ParticleColor        = new Vector4(0.55f, 0.53f, 0.5f, 1f),
-                TopAtlasTile         = new Vector2i(3, 3),  // gray stone
+                TopAtlasTile         = new Vector2i(3, 3), 
                 BottomAtlasTile      = new Vector2i(3, 3),
                 SideAtlasTile        = new Vector2i(3, 3),
                 IsSolid              = true,
@@ -285,7 +252,7 @@ namespace PerigonForge
                 IsTransparent        = true,
                 IsLiquid             = true,
                 CanFall              = false,
-                Buoyancy             = 0.4f,
+                Buoyancy             = 0.9f,
                 IsVisibleInInventory = false,
             });
 
@@ -295,9 +262,9 @@ namespace PerigonForge
                 UsesFlatColor        = false,
                 FlatColor            = Vector4.Zero,
                 ParticleColor        = new Vector4(0.42f, 0.26f, 0.16f, 1f),
-                TopAtlasTile         = new Vector2i(0, 3),  // log top (wood rings)
+                TopAtlasTile         = new Vector2i(0, 3), 
                 BottomAtlasTile      = new Vector2i(0, 3),
-                SideAtlasTile        = new Vector2i(1, 3),  // bark
+                SideAtlasTile        = new Vector2i(1, 3), 
                 IsSolid              = true,
                 IsTransparent        = false,
                 IsLiquid             = false,
@@ -312,11 +279,314 @@ namespace PerigonForge
                 UsesFlatColor        = false,
                 FlatColor            = Vector4.Zero,
                 ParticleColor        = new Vector4(0.28f, 0.56f, 0.18f, 1f),
-                TopAtlasTile         = new Vector2i(3, 1),  // bright green leaves
-                BottomAtlasTile      = new Vector2i(3, 1),
-                SideAtlasTile        = new Vector2i(3, 1),
+                TopAtlasTile         = new Vector2i(3, 2),  
+                BottomAtlasTile      = new Vector2i(3, 2),
+                SideAtlasTile        = new Vector2i(3, 2),
                 IsSolid              = true,
                 IsTransparent        = true,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+            });
+            RegisterCore(BlockType.Maple_Planks, new BlockDefinition
+            {
+                Name                 = "Maple Planks",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.76f, 0.7f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(2, 1), 
+                BottomAtlasTile      = new Vector2i(2, 1),
+                SideAtlasTile        = new Vector2i(2, 1),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = true,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+            });
+            RegisterCore(BlockType.Smooth_Stone, new BlockDefinition
+            {
+                Name                 = "Smooth Stone",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.76f, 0.7f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(2, 3), 
+                BottomAtlasTile      = new Vector2i(2, 3),
+                SideAtlasTile        = new Vector2i(2, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = true,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+            });
+
+            // Maple Stairs, Chair, Ladder, Slab
+            RegisterCore(BlockType.MapleStairs, new BlockDefinition
+            {
+                Name                 = "Maple Stairs",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.6f, 0.4f, 0.25f, 1f),
+                TopAtlasTile         = new Vector2i(1, 3),
+                BottomAtlasTile      = new Vector2i(1, 3),
+                SideAtlasTile        = new Vector2i(1, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "stairs",
+                SupportsRotation     = true,
+                IsSteppable          = true
+            });
+
+            RegisterCore(BlockType.MapleChair, new BlockDefinition
+            {
+                Name                 = "Maple Chair",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.6f, 0.4f, 0.25f, 1f),
+                TopAtlasTile         = new Vector2i(1, 3),
+                BottomAtlasTile      = new Vector2i(1, 3),
+                SideAtlasTile        = new Vector2i(1, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "chair",
+                SupportsRotation     = true,
+                IsSittable           = true
+            });
+
+            RegisterCore(BlockType.MapleLadder, new BlockDefinition
+            {
+                Name                 = "Maple Ladder",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.6f, 0.4f, 0.25f, 1f),
+                TopAtlasTile         = new Vector2i(1, 3),
+                BottomAtlasTile      = new Vector2i(1, 3),
+                SideAtlasTile        = new Vector2i(1, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "ladder",
+                SupportsRotation     = true,
+                IsClimmable          = true
+            });
+
+            RegisterCore(BlockType.MapleSlab, new BlockDefinition
+            {
+                Name                 = "Maple Slab",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.6f, 0.4f, 0.25f, 1f),
+                TopAtlasTile         = new Vector2i(1, 3),
+                BottomAtlasTile      = new Vector2i(1, 3),
+                SideAtlasTile        = new Vector2i(1, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "slab",
+                SupportsRotation     = true,
+                IsSteppable          = true
+            });
+
+            // Stone Stairs, Chair, Ladder, Slab
+            RegisterCore(BlockType.StoneStairs, new BlockDefinition
+            {
+                Name                 = "Stone Stairs",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.55f, 0.53f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(3, 3),
+                BottomAtlasTile      = new Vector2i(3, 3),
+                SideAtlasTile        = new Vector2i(3, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "stairs",
+                SupportsRotation     = true,
+                IsSteppable          = true
+            });
+
+            RegisterCore(BlockType.StoneChair, new BlockDefinition
+            {
+                Name                 = "Stone Chair",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.55f, 0.53f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(3, 3),
+                BottomAtlasTile      = new Vector2i(3, 3),
+                SideAtlasTile        = new Vector2i(3, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "chair",
+                SupportsRotation     = true,
+                IsSittable           = true
+            });
+
+            RegisterCore(BlockType.StoneLadder, new BlockDefinition
+            {
+                Name                 = "Stone Ladder",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.55f, 0.53f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(3, 3),
+                BottomAtlasTile      = new Vector2i(3, 3),
+                SideAtlasTile        = new Vector2i(3, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "ladder",
+                SupportsRotation     = true,
+                IsClimmable          = true
+            });
+
+            RegisterCore(BlockType.StoneSlab, new BlockDefinition
+            {
+                Name                 = "Stone Slab",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.55f, 0.53f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(3, 3),
+                BottomAtlasTile      = new Vector2i(3, 3),
+                SideAtlasTile        = new Vector2i(3, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "slab",
+                SupportsRotation     = true,
+                IsSteppable          = true
+            });
+
+            // Smooth Stone Stairs, Chair, Ladder, Slab
+            RegisterCore(BlockType.SmoothStoneStairs, new BlockDefinition
+            {
+                Name                 = "Smooth Stone Stairs",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.76f, 0.7f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(2, 3),
+                BottomAtlasTile      = new Vector2i(2, 3),
+                SideAtlasTile        = new Vector2i(2, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "stairs",
+                SupportsRotation     = true,
+                IsSteppable          = true
+            });
+
+            RegisterCore(BlockType.SmoothStoneChair, new BlockDefinition
+            {
+                Name                 = "Smooth Stone Chair",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.76f, 0.7f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(2, 3),
+                BottomAtlasTile      = new Vector2i(2, 3),
+                SideAtlasTile        = new Vector2i(2, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "chair",
+                SupportsRotation     = true,
+                IsSittable           = true
+            });
+
+            RegisterCore(BlockType.SmoothStoneLadder, new BlockDefinition
+            {
+                Name                 = "Smooth Stone Ladder",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.76f, 0.7f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(2, 3),
+                BottomAtlasTile      = new Vector2i(2, 3),
+                SideAtlasTile        = new Vector2i(2, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "ladder",
+                SupportsRotation     = true,
+                IsClimmable          = true
+            });
+
+            RegisterCore(BlockType.SmoothStoneSlab, new BlockDefinition
+            {
+                Name                 = "Smooth Stone Slab",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.76f, 0.7f, 0.5f, 1f),
+                TopAtlasTile         = new Vector2i(2, 3),
+                BottomAtlasTile      = new Vector2i(2, 3),
+                SideAtlasTile        = new Vector2i(2, 3),
+                IsSolid              = true,
+                IsTransparent        = false,
+                IsLiquid             = false,
+                CanFall              = false,
+                Buoyancy             = 0f,
+                IsVisibleInInventory = true,
+                UseModel             = true,
+                ModelURL             = "slab",
+                SupportsRotation     = true,
+                IsSteppable          = true
+            });
+            RegisterCore(BlockType.PortalBlock, new BlockDefinition
+            {
+                Name                 = "Portal Block [It don't work]",
+                UsesFlatColor        = false,
+                FlatColor            = Vector4.Zero,
+                ParticleColor        = new Vector4(0.1f, 0.1f, 0.1f, 1f),
+                TopAtlasTile         = new Vector2i(0, 1), 
+                BottomAtlasTile      = new Vector2i(0, 1),
+                SideAtlasTile        = new Vector2i(0, 1),
+                IsSolid              = true,
+                IsTransparent        = false,
                 IsLiquid             = false,
                 CanFall              = false,
                 Buoyancy             = 0f,

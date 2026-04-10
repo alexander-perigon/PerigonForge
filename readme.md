@@ -1,57 +1,125 @@
 # PerigonForge
 
-A high-performance PerigonForge built in C# using the OpenTK wrapper for OpenGL. Engineered for efficiency, PerigonForge utilizes advanced data structures and multi-threaded processing to handle large-scale procedural cubic environments.
+PerigonForge is a high-performance voxel-based game engine developed in C# using the OpenTK wrapper for OpenGL. It is designed for scalability and efficiency, leveraging advanced data structures and multi-threaded processing to support large, procedurally generated cubic worlds.
 
-![PerigonForge Screenshot](./images/Screenshot%202026-03-19%20183607.png)
+--- 
+![Perigonforge Screenshot](screenshots/Screenshot.png)
 
-## License and Terms of Use
+## Overview
 
-**Proprietary Software - All Rights Reserved**
-
-This software and its source code are the exclusive property of alexander-perigon. 
-
-* **Authorized Attribution:** Modification, reproduction, or distribution of these files is strictly prohibited unless performed by the authorized Attributor (alexander-perigon). 
-* **Integrity and Safety:** This engine is provided in compiled Object Code form to ensure stability. Unauthorized tampering with the binary or internal file structure is a direct violation of the licensing terms.
-* **User Responsibility:** Any attempt to modify, move, or alter files within the directory is done at the user's own risk. The developer assumes no responsibility for software failure, data corruption, or system instability resulting from unauthorized edits. If the file structure is altered by anyone other than the authorized Attributor, the software is considered unsupported.
+PerigonForge is a voxel game engine that emphasizes optimized memory usage, parallel processing, and modern rendering techniques to maintain smooth performance even in complex environments. It provides a complete foundation for building voxel-based games with well-done terrain, physics, inventory management, and dynamic weather systems.
 
 ---
 
 ## Features
 
-### Core Engine
-* **Octree-Based World:** 32x32x32 voxel chunks utilizing sparse octrees for optimized memory management.
-* **Procedural Generation:** Multi-octave simplex noise implementation for realistic terrain with distinct biomes including beaches, plains, hills, and mountains.
-* **Multi-threaded Pipeline:** Parallelized chunk generation and mesh building using asynchronous tasks to ensure a consistent frame rate.
+### Core Systems
+- **Octree-Based World Structure**  
+  Utilizes 32×32×32 voxel chunks backed by sparse octrees for efficient memory management and spatial organization.
+
+- **Procedural Terrain Generation**  
+  Implements multi-octave simplex noise to generate varied landscapes, including beaches, plains, hills, and mountainous regions.
+
+- **Multi-threaded Processing Pipeline**  
+  Chunk generation and mesh construction are executed asynchronously across multiple threads to maintain consistent frame rates.
+
+- **First-Person Camera with Physics**  
+  Supports walking, swimming, and flying modes with collision detection and player movement mechanics.
 
 ### Rendering
-* **Atmospheric Sky:** Dynamic sky rendering featuring atmospheric scattering and a volumetric cloud layer.
-* **Optimization:** Hardware-accelerated view frustum culling and greedy meshing to maximize performance.
-* **Texture Mapping:** Integrated block texture atlas with per-face mapping support.
+- **Dynamic Atmospheric Sky**  
+  Includes atmospheric scattering and volumetric cloud rendering for enhanced visual depth.
 
-### Interaction and UI
-* **Precision Raycasting:** Real-time block highlighting and selection for construction and destruction.
-* **Hotbar Utility:** 9-slot inventory system with instant numerical key selection.
-* **Engine Monitoring:** Real-time FPS counter, draw call tracking, and atmospheric controls for fog and render distance.
+- **Rendering Optimizations**  
+  Incorporates hardware-accelerated view frustum culling and greedy meshing to reduce draw calls and improve performance.
+
+- **Texture Atlas System**  
+  Supports efficient texture mapping with per-face block texturing.
+
+- **Custom 3D Model Loading**  
+  OBJ model support for complex block models like stairs, slabs, ladders, and furniture.
+
+- **Post-Processing Effects**  
+  Advanced rendering effects for enhanced visual quality.
+
+### Interaction and Interface
+- **Precision Raycasting**  
+  Enables accurate block selection, placement, and removal in real time.
+
+- **Block Rotation System**  
+  Blocks support vertical and horizontal rotation for flexible placement.
+
+- **Hotbar System**  
+  Features a 9-slot quick-access hotbar with instant selection via numeric input or mouse wheel.
+
+- **Full Inventory System**  
+  45-slot inventory (5 rows × 9 columns) with drag and drop functionality, item stacking, and slot management.
+
+- **Performance Monitoring Tools**  
+  Provides real-time metrics including FPS, draw calls, and adjustable environmental settings such as fog and render distance.
+
+### Weather and Environment
+- **Dynamic Weather System**  
+  Realistic weather effects including rain, sun, and dynamic sky colors.
+
+- **Particle Systems**  
+  Multiple particle effects for block breaking/placement, rain drops, rain splashes on water, and steam vapor.
 
 ---
 
-## Environment and Building
+## Controls
 
-### Prerequisites
-* .NET 8.0 SDK or later
-* OpenGL 4.3 or higher compatible graphics card
-* Only supports windows right now
+| Key | Action |
+|-----|--------|
+| W/A/S/D | Move forward/left/back/right |
+| Space | Jump / Fly up (when flying) |
+| Shift | Fly down / Sprint (when walking) |
+| E | Place block |
+| Q | Drop item from inventory |
+| F9 | Toggle wireframe mode |
+| F3 | Toggle debug info |
+| 1-9 | Select hotbar slot |
+| I | Toggle inventory |
+| Mouse Wheel | Cycle hotbar slots |
+| Mouse Left | Break block |
+| Mouse Right | Place block |
+| Escape | Open settings / Close inventory |
+| Ctrl | Toggle fly mode |
 
-### Build Commands
-*Note: Build access is restricted to the authorized Attributor and verified contributors.*
+---
+
+## System Requirements
+
+- .NET 8.0 SDK or later  
+- OpenGL 4.3 or higher compatible GPU  
+- Windows, Linux, or macOS operating system
+
+---
+
+## Building and Running
+
 ```bash
-# Restore project dependencies
+# Restore dependencies
 dotnet restore
 
-# Execute build process
+# Build the project
 dotnet build
 
-# Launch the engine
+# Run the game
 dotnet run
+```
 
+---
 
+## Documentation
+
+For a comprehensive technical reference guide, see [reference.md](./reference.md).
+
+---
+
+## Technology Stack
+
+- **Language**: C# (.NET 8)
+- **Graphics**: OpenTK 4.x (OpenGL 4.x)
+- **Build System**: dotnet CLI
+- **Target Platforms**: Windows, Linux, macOS

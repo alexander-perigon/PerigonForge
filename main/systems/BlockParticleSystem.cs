@@ -189,14 +189,12 @@ namespace PerigonForge
 
         private void InitializeBlockColors()
         {
-            // Default gray for unknown blocks
             Vector4 defaultColor = new Vector4(0.7f, 0.7f, 0.7f, 1f);
             for (int i = 0; i < 256; i++)
             {
                 _blockColors[i] = defaultColor;
             }
             
-            // Set colors for known block types
             _blockColors[(int)BlockType.Air] = new Vector4(0.9f, 0.9f, 0.9f, 0f);
             _blockColors[(int)BlockType.Grass] = new Vector4(0.3f, 0.7f, 0.25f, 1f);
             _blockColors[(int)BlockType.Dirt] = new Vector4(0.45f, 0.32f, 0.22f, 1f);
@@ -204,6 +202,21 @@ namespace PerigonForge
             _blockColors[(int)BlockType.Water] = new Vector4(0.2f, 0.5f, 0.85f, 0.7f);
             _blockColors[(int)BlockType.MapleLog] = new Vector4(0.42f, 0.26f, 0.16f, 1f);
             _blockColors[(int)BlockType.MapleLeaves] = new Vector4(0.28f, 0.56f, 0.18f, 1f);
+            _blockColors[7] = new Vector4(0.76f, 0.7f, 0.5f, 1f);
+            _blockColors[8] = new Vector4(0.6f, 0.4f, 0.25f, 1f);
+            _blockColors[9] = new Vector4(0.6f, 0.4f, 0.25f, 1f);
+            _blockColors[10] = new Vector4(0.6f, 0.4f, 0.25f, 1f);
+            _blockColors[11] = new Vector4(0.6f, 0.4f, 0.25f, 1f);
+            _blockColors[12] = new Vector4(0.55f, 0.53f, 0.5f, 1f);
+            _blockColors[13] = new Vector4(0.55f, 0.53f, 0.5f, 1f);
+            _blockColors[14] = new Vector4(0.55f, 0.53f, 0.5f, 1f);
+            _blockColors[15] = new Vector4(0.55f, 0.53f, 0.5f, 1f);
+            _blockColors[16] = new Vector4(0.76f, 0.7f, 0.5f, 1f);
+            _blockColors[17] = new Vector4(0.76f, 0.7f, 0.5f, 1f);
+            _blockColors[18] = new Vector4(0.76f, 0.7f, 0.5f, 1f);
+            _blockColors[19] = new Vector4(0.76f, 0.7f, 0.5f, 1f);
+            _blockColors[20] = new Vector4(0.76f, 0.7f, 0.5f, 1f);
+            _blockColors[21] = new Vector4(0.1f, 0.1f, 0.1f, 1f);
         }
 
         private void CreateShader()
@@ -257,19 +270,30 @@ uniform vec3 uCameraPos;
 uniform sampler2D uTexture;
 uniform int uBlockTypeId;
 
-// Get block color based on type
 vec4 getBlockColor(int blockType, vec2 uv)
 {
-    // Use hardcoded colors based on block type
-    // BlockType enum: Air=0, Grass=1, Dirt=2, Stone=3, Water=4, MapleLog=5, MapleLeaves=6
-    if (blockType == 1) return vec4(0.3, 0.7, 0.25, 1.0);  // Grass - green
-    if (blockType == 2) return vec4(0.45, 0.32, 0.22, 1.0); // Dirt - brown
-    if (blockType == 3) return vec4(0.55, 0.53, 0.5, 1.0);  // Stone - gray
-    if (blockType == 4) return vec4(0.2, 0.5, 0.85, 0.7);    // Water - blue transparent
-    if (blockType == 5) return vec4(0.42, 0.26, 0.16, 1.0); // MapleLog - dark brown
-    if (blockType == 6) return vec4(0.28, 0.56, 0.18, 1.0); // MapleLeaves - green
-    
-    // Default gray
+    if (blockType == 0) return vec4(0.9, 0.9, 0.9, 0.0);
+    if (blockType == 1) return vec4(0.3, 0.7, 0.25, 1.0);
+    if (blockType == 2) return vec4(0.45, 0.32, 0.22, 1.0);
+    if (blockType == 3) return vec4(0.55, 0.53, 0.5, 1.0);
+    if (blockType == 4) return vec4(0.2, 0.5, 0.85, 0.7);
+    if (blockType == 5) return vec4(0.42, 0.26, 0.16, 1.0);
+    if (blockType == 6) return vec4(0.28, 0.56, 0.18, 1.0);
+    if (blockType == 7) return vec4(0.76, 0.7, 0.5, 1.0);
+    if (blockType == 8) return vec4(0.6, 0.4, 0.25, 1.0);
+    if (blockType == 9) return vec4(0.6, 0.4, 0.25, 1.0);
+    if (blockType == 10) return vec4(0.6, 0.4, 0.25, 1.0);
+    if (blockType == 11) return vec4(0.6, 0.4, 0.25, 1.0);
+    if (blockType == 12) return vec4(0.55, 0.53, 0.5, 1.0);
+    if (blockType == 13) return vec4(0.55, 0.53, 0.5, 1.0);
+    if (blockType == 14) return vec4(0.55, 0.53, 0.5, 1.0);
+    if (blockType == 15) return vec4(0.55, 0.53, 0.5, 1.0);
+    if (blockType == 16) return vec4(0.76, 0.7, 0.5, 1.0);
+    if (blockType == 17) return vec4(0.76, 0.7, 0.5, 1.0);
+    if (blockType == 18) return vec4(0.76, 0.7, 0.5, 1.0);
+    if (blockType == 19) return vec4(0.76, 0.7, 0.5, 1.0);
+    if (blockType == 20) return vec4(0.76, 0.7, 0.5, 1.0);
+    if (blockType == 21) return vec4(0.1, 0.1, 0.1, 1.0);
     return vec4(0.7, 0.7, 0.7, 1.0);
 }
 
@@ -376,6 +400,7 @@ void main()
             
             float dt = deltaTime;
             int activeIndex = 0;
+            float spawnRadiusSq = _spawnRadius * _spawnRadius * 100f; // squared for optimization
             
             // First pass: update physics
             for (int i = 0; i < _maxParticles; i++)
@@ -390,64 +415,77 @@ void main()
                 CheckCollision(ref _particles[i]);
             }
             
-            // Second pass: particle-to-particle collision (only check nearby particles)
-            // Using spatial optimization - only check particles close to each other
-            for (int i = 0; i < _maxParticles; i++)
+            // Optimized: Only run particle-particle collision if there are enough active particles
+            // O(n²) is too expensive for large particle counts, so skip when not worth it
+            if (_activeCount > 0 && _activeCount < 20)
             {
-                if (!_particles[i].active) continue;
-                
-                for (int j = i + 1; j < _maxParticles; j++)
+                // Second pass: particle-to-particle collision (only check nearby particles)
+                // Using spatial optimization - only check particles close to each other
+                for (int i = 0; i < _maxParticles; i++)
                 {
-                    if (!_particles[j].active) continue;
+                    if (!_particles[i].active) continue;
                     
-                    // Quick distance check first
-                    Vector3 diff = _particles[i].position - _particles[j].position;
-                    float distSq = diff.LengthSquared;
-                    float minDist = (_particles[i].initialSize + _particles[j].initialSize) * 0.5f;
-                    
-                    if (distSq < minDist * minDist)
+                    for (int j = i + 1; j < _maxParticles; j++)
                     {
-                        // Particle-particle collision!
-                        float dist = MathF.Sqrt(distSq);
-                        if (dist < 0.001f) dist = 0.001f; // Avoid division by zero
+                        if (!_particles[j].active) continue;
                         
-                        // Normalize collision vector
-                        Vector3 normal = diff / dist;
+                        // Quick distance check first (using squared distance to avoid sqrt)
+                        Vector3 diff = _particles[i].position - _particles[j].position;
+                        float distSq = diff.X * diff.X + diff.Y * diff.Y + diff.Z * diff.Z;
+                        float minDist = (_particles[i].initialSize + _particles[j].initialSize) * 0.5f;
                         
-                        // Separate particles
-                        float overlap = minDist - dist;
-                        _particles[i].position += normal * overlap * 0.5f;
-                        _particles[j].position -= normal * overlap * 0.5f;
-                        
-                        // Bounce with lower restitution
-                        float bounce = 0.4f;
-                        
-                        // Relative velocity
-                        Vector3 relVel = _particles[i].velocity - _particles[j].velocity;
-                        float velAlongNormal = Vector3.Dot(relVel, normal);
-                        
-                        // Only bounce if moving toward each other
-                        if (velAlongNormal < 0)
+                        if (distSq < minDist * minDist)
                         {
-                            float impulse = -(1 + bounce) * velAlongNormal;
-                            // Assume equal mass
-                            impulse *= 0.5f;
+                            // Particle-particle collision!
+                            float dist = MathF.Sqrt(distSq);
+                            if (dist < 0.001f) dist = 0.001f; // Avoid division by zero
                             
-                            _particles[i].velocity += normal * impulse;
-                            _particles[j].velocity -= normal * impulse;
+                            // Normalize collision vector
+                            Vector3 normal = diff / dist;
+                            
+                            // Separate particles
+                            float overlap = minDist - dist;
+                            _particles[i].position += normal * overlap * 0.5f;
+                            _particles[j].position -= normal * overlap * 0.5f;
+                            
+                            // Bounce with lower restitution
+                            float bounce = 0.4f;
+                            
+                            // Relative velocity
+                            Vector3 relVel = _particles[i].velocity - _particles[j].velocity;
+                            float velAlongNormal = Vector3.Dot(relVel, normal);
+                            
+                            // Only bounce if moving toward each other
+                            if (velAlongNormal < 0)
+                            {
+                                float impulse = -(1 + bounce) * velAlongNormal;
+                                // Assume equal mass
+                                impulse *= 0.5f;
+                                
+                                _particles[i].velocity += normal * impulse;
+                                _particles[j].velocity -= normal * impulse;
+                            }
                         }
                     }
                 }
             }
+            
+            // Optimized: Calculate camera distance squared once and reuse
+            float camX = cameraPosition.X, camY = cameraPosition.Y, camZ = cameraPosition.Z;
             
             // Third pass: update instance data and check lifetime
             for (int i = 0; i < _maxParticles; i++)
             {
                 if (!_particles[i].active) continue;
                 
-                Vector3 diff = _particles[i].position - cameraPosition;
+                // Optimized: use squared distance for culling
+                float dx = _particles[i].position.X - camX;
+                float dy = _particles[i].position.Y - camY;
+                float dz = _particles[i].position.Z - camZ;
+                float distToCameraSq = dx * dx + dy * dy + dz * dz;
+                
                 if (_particles[i].lifetime > _particles[i].maxLifetime || 
-                    diff.Length > _spawnRadius * 10f)
+                    distToCameraSq > spawnRadiusSq)
                 {
                     _particles[i].active = false;
                     _freeIndices.Enqueue(i);

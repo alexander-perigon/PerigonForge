@@ -1,19 +1,8 @@
 using System;
-using System.Collections.Generic;
 using OpenTK.Mathematics;
 
 namespace PerigonForge
 {
-    /// <summary>
-    /// Terrain generator with multi-octave FBM heightmap, sea level water,
-    /// beach biomes, and maple trees that spawn correctly on the terrain surface.
-    ///
-    /// Tree placement uses a deterministic grid-jitter approach:
-    ///   • The world is divided into TREE_CELL_SIZE cells.
-    ///   • Each cell may contain at most one tree, placed at a random offset within the cell.
-    ///   • Whether the cell spawns a tree is determined by a hash of the cell coords.
-    ///   • Trees are generated as a post-pass after chunk terrain fill, called from World.
-    /// </summary>
     public class TerrainGenerator
     {
         // ── Terrain constants ──────────────────────────────────────────────────

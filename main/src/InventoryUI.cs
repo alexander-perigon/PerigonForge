@@ -8,6 +8,7 @@ namespace PerigonForge
     /// Handles inventory UI rendering and input handling.
     /// Hotbar slots (bottom row, inventory slots 36-44) are visually distinguished
     /// with a gold tint, and the currently selected hotbar slot gets a bright border.
+    /// The side panel has a scrollable block list with a visible scrollbar.
     /// </summary>
     public class InventoryUI : IDisposable
     {
@@ -16,6 +17,9 @@ namespace PerigonForge
         private const int SlotSpacing    = 4;
         private const int PanelPadding   = 10;
         private const int SidePanelWidth = 200;
+        private const int ScrollBarWidth = 12;
+        private const int BlockSize      = 40;
+        private const int BlockSpacing   = 8;
 
         // Hotbar row visual identity — warm gold to match the on-screen hotbar
         private static readonly Vector4 HotbarRowBg         = new(0.28f, 0.26f, 0.08f, 0.80f);
@@ -26,6 +30,11 @@ namespace PerigonForge
         private static readonly Vector4 HotbarSelectedBorder = new(1.00f, 1.00f, 0.00f, 1.00f);
         private static readonly Vector4 HotbarNumColor       = new(0.95f, 0.90f, 0.25f, 0.80f);
         private static readonly Vector4 HotbarNumColorSel    = new(1.00f, 1.00f, 0.20f, 1.00f);
+
+        // Scrollbar colors
+        private static readonly Vector4 ScrollBarBg    = new(0.15f, 0.15f, 0.20f, 0.80f);
+        private static readonly Vector4 ScrollBarThumb = new(0.40f, 0.40f, 0.50f, 0.90f);
+        private static readonly Vector4 ScrollBarHover = new(0.50f, 0.50f, 0.65f, 1.00f);
 
         // ── References ─────────────────────────────────────────────────────────────
         private readonly InventorySystem      _inventory;
@@ -47,6 +56,16 @@ namespace PerigonForge
         // Cached panel layout
         private int _invX, _invY, _invW, _invH;
         private int _sideX, _sideY;
+        
+        // Time for rotation animation (synced with Game.cs totalTime)
+        private double _time = 0;
+        
+        // Scroll state for side panel
+        private float _scrollOffset = 0;
+        private bool  _isDraggingScroll = false;
+        private int   _scrollDragStartY = 0;
+        private float _scrollDragStartOffset = 0;
+        private bool  _isHoveringSidePanel = false;
 
         // ── Constructor ────────────────────────────────────────────────────────────
         public InventoryUI(
@@ -78,6 +97,15 @@ namespace PerigonForge
             _draggedBlockType        = BlockType.Air;
         }
 
+        /// <summary>
+        /// Handle mouse wheel scrolling for the side panel.
+        /// NOTE: Wheel scrolling is disabled - only scrollbar click/drag scrolls.
+        /// </summary>
+        public void HandleMouseWheel(float deltaY)
+        {
+            // Wheel scrolling disabled - only scrollbar click/drag scrolls
+        }
+
         public void Render()
         {
             if (!_inventory.IsOpen) return;
@@ -97,6 +125,15 @@ namespace PerigonForge
                 RenderDraggedBlockFromSidePanel();
 
             RenderTooltip();
+        }
+
+        /// <summary>
+        /// Update the time for rotation animation. Call this before Render()
+        /// with the same time value used in the game's render loop.
+        /// </summary>
+        public void UpdateTime(double time)
+        {
+            _time = time;
         }
 
         public bool HandleMouseClick(float mouseX, float mouseY, bool isLeftClick, bool isRightClick)
@@ -135,6 +172,15 @@ namespace PerigonForge
                 return true;
             }
 
+            // Check if clicking on scrollbar
+            if (IsMouseOverScrollBar(mouseX, mouseY))
+            {
+                _isDraggingScroll = true;
+                _scrollDragStartY = (int)mouseY;
+                _scrollDragStartOffset = _scrollOffset;
+                return true;
+            }
+
             CancelAllDrags();
             return false;
         }
@@ -149,6 +195,29 @@ namespace PerigonForge
             RecalcLayout();
             _hoveredSlot           = GetSlotAtPosition(mouseX, mouseY, _invX, _invY);
             _hoveredSidePanelIndex = GetSidePanelIndexAtPosition(mouseX, mouseY, _sideX, _sideY);
+            _isHoveringSidePanel = _hoveredSidePanelIndex >= 0;
+            
+            // Only handle scrollbar dragging if we're actively dragging AND still over the scrollbar
+            if (_isDraggingScroll)
+            {
+                if (IsMouseOverScrollBar(mouseX, mouseY))
+                {
+                    int deltaY = (int)mouseY - _scrollDragStartY;
+                    ApplyScrollDrag(deltaY);
+                }
+                else
+                {
+
+                    _isDraggingScroll = false;
+                }
+            }
+        }
+
+        public bool IsHoveringSidePanel() => _isHoveringSidePanel;
+        
+        public void HandleMouseUp()
+        {
+            _isDraggingScroll = false;
         }
 
         // ── Layout ─────────────────────────────────────────────────────────────────
@@ -363,41 +432,120 @@ namespace PerigonForge
                     slot.BlockType,
                     x + SlotSize / 2, y + SlotSize / 2,
                     SlotSize - 10,
-                    _screenWidth, _screenHeight, 0);
+                    _screenWidth, _screenHeight, _time);
 
                 if (slot.Count > 1)
                     _fontRenderer.RenderText(slot.Count.ToString(),
                         x + SlotSize - 16, y + SlotSize - 16,
                         new Vector4(1f, 1f, 1f, 1f), _screenWidth, _screenHeight);
-            }
-        }
+            }        }
 
         private void RenderSidePanel(int x, int y, int width, int height)
         {
+            // Shadow
             _uiRenderer.RenderRectangle(x + 4, y + 4, width, height,
                 new Vector4(0f, 0f, 0f, 0.35f), _screenWidth, _screenHeight);
+            
+            // Background
             _uiRenderer.RenderRectangle(x, y, width, height,
                 new Vector4(0.12f, 0.12f, 0.18f, 0.96f), _screenWidth, _screenHeight);
+            
+            // Border
             _uiRenderer.RenderRectangleOutline(x, y, width, height,
                 new Vector4(0.30f, 0.50f, 0.80f, 1.0f), 2, _screenWidth, _screenHeight);
 
+            // Title
             _fontRenderer.RenderText("Blocks",
                 x + PanelPadding, y + PanelPadding,
                 new Vector4(0.9f, 0.9f, 1.0f, 1.0f), _screenWidth, _screenHeight);
 
             var blockTypes   = GetVisibleBlockTypes();
-            int blockSize    = 40;
-            int blockSpacing = 8;
-            int blocksPerRow = (width - PanelPadding * 2) / (blockSize + blockSpacing);
+            int blocksPerRow = (width - PanelPadding * 2 - ScrollBarWidth) / (BlockSize + BlockSpacing);
+            int totalRows = (int)Math.Ceiling((float)blockTypes.Count / blocksPerRow);
             int startY       = y + PanelPadding + 30;
+            int contentHeight = totalRows * (BlockSize + BlockSpacing);
+            int viewHeight = height - PanelPadding - 40;
+            bool needsScrollbar = contentHeight > viewHeight;
+            int scrollbarX = x + width - ScrollBarWidth;
+            int scrollbarY = y + PanelPadding + 30;
+            int scrollbarHeight = viewHeight;
+            
+            // Render scrollbar background
+            if (needsScrollbar)
+            {
+                _uiRenderer.RenderRectangle(scrollbarX, scrollbarY, ScrollBarWidth, scrollbarHeight,
+                    ScrollBarBg, _screenWidth, _screenHeight);
+            }
+            else
+            {
+                // Hide scrollbar by rendering a dark overlay behind blocks area
+                int overlayX = x + width - PanelPadding - ScrollBarWidth - 2;
+                int overlayWidth = ScrollBarWidth + 4;
+                _uiRenderer.RenderRectangle(overlayX, scrollbarY - 20, overlayWidth, scrollbarHeight + 40,
+                    new Vector4(0.12f, 0.12f, 0.18f, 0.96f), _screenWidth, _screenHeight);
+            }
+            
+            // Calculate thumb position and size
+            float scrollRatio = _scrollOffset / Math.Max(1, contentHeight - viewHeight);
+            float thumbSizeRatio = viewHeight / (float)contentHeight;
+            int thumbHeight = Math.Max(20, (int)(scrollbarHeight * thumbSizeRatio));
+            int thumbY = scrollbarY + (int)((scrollbarHeight - thumbHeight) * scrollRatio);
+            
+            if (needsScrollbar)
+            {
+                // Render scrollbar thumb
+                bool isHoveringScroll = IsMouseOverScrollBar(_mouseX, _mouseY);
+                Vector4 thumbColor = (_isDraggingScroll || isHoveringScroll) ? ScrollBarHover : ScrollBarThumb;
+                
+                _uiRenderer.RenderRectangle(scrollbarX + 2, thumbY, ScrollBarWidth - 4, thumbHeight,
+                    thumbColor, _screenWidth, _screenHeight);
+                
+                // Render up/down arrows
+                _uiRenderer.RenderRectangle(scrollbarX, scrollbarY - 20, ScrollBarWidth, 20,
+                    ScrollBarBg, _screenWidth, _screenHeight);
+                _uiRenderer.RenderRectangle(scrollbarX, scrollbarY + scrollbarHeight, ScrollBarWidth, 20,
+                    ScrollBarBg, _screenWidth, _screenHeight);
+                
+                // Draw triangles for arrows
+                int arrowCenterX = scrollbarX + ScrollBarWidth / 2;
+                _fontRenderer.RenderTextCentered("^", arrowCenterX, scrollbarY - 18,
+                    new Vector4(0.6f, 0.6f, 0.7f, 0.9f), _screenWidth, _screenHeight);
+                _fontRenderer.RenderTextCentered("v", arrowCenterX, scrollbarY + scrollbarHeight + 2,
+                    new Vector4(0.6f, 0.6f, 0.7f, 0.9f), _screenWidth, _screenHeight);
+            }
+
+            // Render blocks with clipping (draw dark overlay for clipped area)
+            int contentX = x + PanelPadding;
+            int contentWidth = needsScrollbar ? blocksPerRow * (BlockSize + BlockSpacing) : width - PanelPadding * 2;
 
             for (int i = 0; i < blockTypes.Count; i++)
             {
                 int row = i / blocksPerRow;
                 int col = i % blocksPerRow;
-                int bx  = x + PanelPadding + col * (blockSize + blockSpacing);
-                int by  = startY + row * (blockSize + blockSpacing);
-                RenderBlockInSidePanel(bx, by, blockSize, blockTypes[i], i == _hoveredSidePanelIndex);
+                int bx  = contentX + col * (BlockSize + BlockSpacing);
+                int by  = startY + row * (BlockSize + BlockSpacing) - (int)_scrollOffset;
+                
+                // Only render if visible (within panel bounds)
+                if (by + BlockSize >= startY && by <= y + height - PanelPadding)
+                {
+                    RenderBlockInSidePanel(bx, by, BlockSize, blockTypes[i], i == _hoveredSidePanelIndex);
+                }
+            }
+            
+            // Draw gradient fade at top/bottom if scrolled
+            if (_scrollOffset > 0)
+            {
+                // Top fade
+                _uiRenderer.RenderRectangle(x + PanelPadding, y + PanelPadding + 25, contentWidth, 10,
+                    new Vector4(0.12f, 0.12f, 0.18f, 0.5f), _screenWidth, _screenHeight);
+            }
+            
+            int bottomFadeY = y + height - PanelPadding - 15;
+            if (_scrollOffset < contentHeight - viewHeight)
+            {
+                // Bottom fade
+                _uiRenderer.RenderRectangle(x + PanelPadding, bottomFadeY, contentWidth, 15,
+                    new Vector4(0.12f, 0.12f, 0.18f, 0.5f), _screenWidth, _screenHeight);
             }
         }
 
@@ -412,7 +560,7 @@ namespace PerigonForge
             _uiRenderer.RenderRectangleOutline(x, y, size, size, border, hovered ? 2 : 1,
                 _screenWidth, _screenHeight);
             _blockPreviewRenderer.RenderBlock(blockType,
-                x + size / 2, y + size / 2, size - 4, _screenWidth, _screenHeight, 0);
+                x + size / 2, y + size / 2, size - 4, _screenWidth, _screenHeight, _time);
         }
 
         private void RenderDraggedItem()
@@ -424,7 +572,7 @@ namespace PerigonForge
                 SlotSize, SlotSize,
                 new Vector4(0.35f, 0.35f, 0.45f, 0.85f), _screenWidth, _screenHeight);
             _blockPreviewRenderer.RenderBlock(item.BlockType,
-                _mouseX, _mouseY, SlotSize - 10, _screenWidth, _screenHeight, 0);
+                _mouseX, _mouseY, SlotSize - 10, _screenWidth, _screenHeight, _time);
 
             if (item.Count > 1)
                 _fontRenderer.RenderText(item.Count.ToString(),
@@ -440,7 +588,7 @@ namespace PerigonForge
                 SlotSize, SlotSize,
                 new Vector4(0.35f, 0.35f, 0.45f, 0.85f), _screenWidth, _screenHeight);
             _blockPreviewRenderer.RenderBlock(_draggedBlockType,
-                _mouseX, _mouseY, SlotSize - 10, _screenWidth, _screenHeight, 0);
+                _mouseX, _mouseY, SlotSize - 10, _screenWidth, _screenHeight, _time);
         }
 
         private void RenderTooltip()
@@ -524,6 +672,35 @@ namespace PerigonForge
                 && mouseY >= dbY && mouseY < dbY + dbSize;
         }
 
+        private bool IsMouseOverScrollBar(float mouseX, float mouseY)
+        {
+            int scrollbarX = _sideX + SidePanelWidth - ScrollBarWidth;
+            int scrollbarY = _sideY + PanelPadding + 30;
+            int scrollbarHeight = _invH - PanelPadding - 40;
+            
+            return mouseX >= scrollbarX && mouseX < scrollbarX + ScrollBarWidth
+                && mouseY >= scrollbarY - 20 && mouseY < scrollbarY + scrollbarHeight + 20;
+        }
+
+        private void ApplyScrollDrag(int deltaY)
+        {
+            var blockTypes = GetVisibleBlockTypes();
+            int blocksPerRow = (SidePanelWidth - PanelPadding * 2 - ScrollBarWidth) / (BlockSize + BlockSpacing);
+            int totalRows = (int)Math.Ceiling((float)blockTypes.Count / blocksPerRow);
+            
+            int contentHeight = totalRows * (BlockSize + BlockSpacing);
+            int viewHeight = _invH - PanelPadding - 50;
+            
+            if (contentHeight <= viewHeight) return;
+            
+            float maxScroll = contentHeight - viewHeight;
+            
+            // Map pixel movement to scroll position
+            float scrollPerPixel = maxScroll / Math.Max(1, viewHeight - 40);
+            _scrollOffset = _scrollDragStartOffset + deltaY * scrollPerPixel;
+            _scrollOffset = Math.Max(0, Math.Min(_scrollOffset, maxScroll));
+        }
+
         private int GetSlotAtPosition(float mouseX, float mouseY, int panelX, int panelY)
         {
             int relX = (int)mouseX - panelX;
@@ -552,24 +729,29 @@ namespace PerigonForge
 
         private int GetSidePanelIndexAtPosition(float mouseX, float mouseY, int panelX, int panelY)
         {
+            // Don't allow clicking on blocks if over scrollbar
+            int scrollbarX = panelX + SidePanelWidth - ScrollBarWidth;
+            if (mouseX >= scrollbarX) return -1;
+            
             int relX = (int)mouseX - panelX - PanelPadding;
             int relY = (int)mouseY - panelY - PanelPadding - 30;
             if (relX < 0 || relY < 0) return -1;
 
-            const int blockSize    = 40;
-            const int blockSpacing = 8;
-            int       blocksPerRow = (SidePanelWidth - PanelPadding * 2) / (blockSize + blockSpacing);
+            int blocksPerRow = (SidePanelWidth - PanelPadding * 2 - ScrollBarWidth) / (BlockSize + BlockSpacing);
 
-            int col    = relX / (blockSize + blockSpacing);
-            int row    = relY / (blockSize + blockSpacing);
-            int localX = relX - col * (blockSize + blockSpacing);
-            int localY = relY - row * (blockSize + blockSpacing);
+            int col    = relX / (BlockSize + BlockSpacing);
+            int row    = relY / (BlockSize + BlockSpacing);
+            int localX = relX - col * (BlockSize + BlockSpacing);
+            int localY = relY - row * (BlockSize + BlockSpacing);
 
             if (col >= blocksPerRow)               return -1;
-            if (localX < 0 || localX >= blockSize) return -1;
-            if (localY < 0 || localY >= blockSize) return -1;
+            if (localX < 0 || localX >= BlockSize) return -1;
+            if (localY < 0 || localY >= BlockSize) return -1;
+            
+            // Adjust row by scroll offset
+            int adjustedRow = row + (int)(_scrollOffset / (BlockSize + BlockSpacing));
 
-            return row * blocksPerRow + col;
+            return adjustedRow * blocksPerRow + col;
         }
 
         private static List<BlockType> GetVisibleBlockTypes()
